@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# VS Code
+.vscode/
+
+# ---- Large QC scratch / cache (do NOT upload) ----
+*.h5
+*.hdf5
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Results & data
+results/
+*.pkl
+*.csv
+
+# PySCF scratch
+/tmp/
+scratch/
+pyscf_tmp/
+
+# CUDA-Q / build artifacts
+build/
+dist/
+*.so
+
+# Ignore heavy data files
+*.h5
+*.hdf5
