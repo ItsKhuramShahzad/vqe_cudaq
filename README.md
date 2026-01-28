@@ -33,19 +33,23 @@ The framework supports **active-space Hamiltonians**, a **UCCSD ansatz**, and ex
 ## 📁 Repository Structure
 
 ```
-vqe-cudaq/
-├── README.md
-├── requirements.txt
+vqe_cudaq/
+├── geometries(xyz_files)/
+├── integrals/
+├── scripts/
+├── vqe_cudaq/
+│   ├── __init__.py
+│   ├── molecules.py
+│   ├── hamiltonian.py
+│   ├── ansatz.py
+│   ├── runner.py
+│   └── cli.py
+├── .gitattributes
 ├── .gitignore
-├── src/
-│   └── vqe_cudaq/
-│       ├── __init__.py
-│       ├── molecules.py
-│       ├── hamiltonian.py
-│       ├── ansatz.py
-│       ├── runner.py
-│       └── cli.py
-└── results/
+├── LICENSE
+├── README.md
+└── requirements.txt
+
 ```
 
 ---
