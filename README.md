@@ -30,6 +30,8 @@ across:
   parameter counts, convergence traces, per-cycle and quantum/optimizer timing)
 - **Analysis suite**: energy CSV, static & interactive scatter plots, and a
   full PGFPlots/LaTeX report generator
+- **Molecular-orbital inspection**: all-MO Molden/CSV export, frontier cube
+  files, MO energy diagrams, and positive/negative Jupyter isosurfaces
 
 ---
 
@@ -55,6 +57,7 @@ vqe_cudaq/
 │   ├── vqe.py                # single-chunk / multi-cycle / jitter optimizers
 │   ├── insights.py           # PySCF/OpenFermion diagnostics
 │   ├── visualization.py      # interactive 3D molecular geometry views
+│   ├── orbitals.py           # MO calculation, export, diagrams, 3D isosurfaces
 │   ├── driver.py             # run_one_molecule / run_all_molecules
 │   └── cli.py                # command-line entry point
 ├── analysis/                 # reporting tools (no CUDA-Q needed)
@@ -64,6 +67,8 @@ vqe_cudaq/
 │   └── latex_report.py       # full PGFPlots/LaTeX figure + report generator
 ├── scripts/
 │   └── dump_integrals.py
+├── notebooks/
+│   └── Molecular_Orbital_Visualization.ipynb
 ├── integrals/                # cached active-space integrals (.npz)
 ├── geometries( xyz_files)/
 └── results/                  # PKL outputs (git-ignored)
@@ -166,6 +171,60 @@ least one unoccupied active orbital and one external virtual orbital. Molecule
 orbital counts are basis-dependent; use explicit `--total-orbitals` and
 `--total-electrons` values whenever the calculation basis differs from the
 metadata source.
+
+### Inspect molecular orbitals before choosing an active space
+
+A complete ready-to-run Jupyter workflow is provided in
+[`notebooks/Molecular_Orbital_Visualization.ipynb`](notebooks/Molecular_Orbital_Visualization.ipynb).
+It exports every orbital and gives you a dropdown for interactive 3D viewing.
+
+Calculate one molecule and export all canonical MOs to Molden, a complete
+energy/occupation table, an energy-level diagram, and cube files around the
+HOMO/LUMO frontier:
+
+```bash
+python -m vqe_cudaq.cli --export-mos --molecule Methylene \
+    --basis cc-pVDZ --mo-window 3 --mo-grid 80
+```
+
+The default cube selection is HOMO-3 through HOMO and LUMO through LUMO+3.
+Use zero-based explicit indices when needed, or avoid the relatively large
+cube grids:
+
+```bash
+python -m vqe_cudaq.cli --export-mos --molecule Adenine \
+    --basis 6-31g --mo-indices 18 19 20 21 --mo-grid 100
+python -m vqe_cudaq.cli --export-mos --molecule Adenine \
+    --basis 6-31g --no-mo-cubes
+```
+
+The Molden file contains **every** orbital and can be opened in Molden,
+Avogadro, or Jmol. From Jupyter, calculate and inspect the table or render a
+cube's positive (blue) and negative (red) phases:
+
+```python
+from vqe_cudaq import (
+    export_orbital_bundle,
+    orbital_table,
+    run_orbital_calculation,
+    view_orbital_cube,
+)
+from vqe_cudaq.molecules import molecules
+
+calc = run_orbital_calculation(
+    "Methylene", molecules["Methylene"], basis="cc-pVDZ"
+)
+display(orbital_table(calc))
+
+files = export_orbital_bundle(calc, occupied_below=3, virtual_above=3)
+view_orbital_cube(calc, files["cubes"][0], isovalue=0.03).show()
+```
+
+For active-space selection, inspect orbital energy, occupation, spatial shape,
+symmetry/localization, and chemical character together. Do not select solely
+by proximity to the HOMO-LUMO gap: include near-degenerate orbitals and both
+members of chemically important bonding/antibonding pairs. Generated MO data
+are ignored by Git because cube files can be very large.
 
 ---
 

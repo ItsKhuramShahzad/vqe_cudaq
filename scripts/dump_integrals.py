@@ -64,6 +64,7 @@ def dump_integrals_all(
                         nele_cas=Ne_a,
                         norb_cas=No_a,
                         ac=True,
+                        coordinate_unit=mol.get("coordinate_unit", "angstrom"),
                     )
 
                     E_core = float(mol_ham.constant)

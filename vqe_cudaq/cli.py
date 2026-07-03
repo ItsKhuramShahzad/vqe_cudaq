@@ -10,6 +10,7 @@ Examples
     python -m vqe_cudaq.cli --export-xyz --molecule Adenine
     python -m vqe_cudaq.cli --generate-active-spaces --total-orbitals 40 --total-electrons 15
     python -m vqe_cudaq.cli --analyze-active-spaces --molecule Methylene
+    python -m vqe_cudaq.cli --export-mos --molecule Methylene --basis cc-pVDZ
 """
 
 import os
@@ -63,6 +64,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-active-electrons", "--max_active_electrons",
                    type=int, default=8,
                    help="Maximum electrons in a generated active space (default: 8).")
+    p.add_argument("--export-mos", "--export_mos", action="store_true",
+                   help="Calculate and export molecular orbitals instead of running VQE.")
+    p.add_argument("--mo-method", choices=["hf", "dft"], default="hf",
+                   help="Mean-field method for orbital generation (default: hf).")
+    p.add_argument("--xc", default="b3lyp",
+                   help="DFT functional used with --mo-method dft (default: b3lyp).")
+    p.add_argument("--mo-output-dir", default="molecular_orbitals",
+                   help="MO output directory (default: molecular_orbitals).")
+    p.add_argument("--mo-window", type=int, default=3,
+                   help="Orbitals below HOMO and above LUMO to export as cubes.")
+    p.add_argument("--mo-indices", nargs="*", type=int, default=None,
+                   help="Explicit zero-based MO indices for diagrams/cubes.")
+    p.add_argument("--mo-grid", type=int, default=80,
+                   help="Cube grid points per axis (default: 80).")
+    p.add_argument("--no-mo-cubes", action="store_true",
+                   help="Export Molden/table/diagram only; skip cube files.")
     return p
 
 
@@ -204,6 +221,60 @@ def _apply_config(args):
     config.TARGET_PRECISION = None if args.precision == "default" else args.precision
 
 
+def _run_orbital_export(args):
+    """Calculate one molecule's canonical MOs and export research artifacts."""
+    if args.all or args.molecule is None:
+        raise SystemExit("--export-mos requires exactly one --molecule NAME.")
+    if args.molecule not in molecules:
+        raise SystemExit(f"Molecule {args.molecule!r} not found.")
+    if args.mo_window < 0:
+        raise SystemExit("--mo-window cannot be negative.")
+
+    from .orbitals import export_orbital_bundle, orbital_table, run_orbital_calculation
+
+    print(
+        f"[SCF] {args.molecule} | METHOD={args.mo_method.upper()} | "
+        f"BASIS={args.basis}",
+        flush=True,
+    )
+    calculation = run_orbital_calculation(
+        args.molecule,
+        molecules[args.molecule],
+        basis=args.basis,
+        method=args.mo_method,
+        xc=args.xc,
+    )
+    paths = export_orbital_bundle(
+        calculation,
+        output_dir=args.mo_output_dir,
+        indices=args.mo_indices,
+        occupied_below=args.mo_window,
+        virtual_above=args.mo_window,
+        grid=args.mo_grid,
+        export_cubes=not args.no_mo_cubes,
+    )
+
+    table = orbital_table(calculation)
+    occupied = table.loc[table["occupation"] > 1e-8]
+    virtual = table.loc[table["occupation"] <= 1e-8]
+    homo = int(occupied.iloc[-1]["mo_index"]) if not occupied.empty else None
+    lumo = int(virtual.iloc[0]["mo_index"]) if not virtual.empty else None
+    print(
+        f"[DONE] converged={calculation.converged} | "
+        f"E={calculation.total_energy:.12f} Ha | HOMO={homo} | LUMO={lumo}",
+        flush=True,
+    )
+    print(f"[MO] all-orbital Molden -> {paths['molden']}", flush=True)
+    print(f"[MO] energy table       -> {paths['table']}", flush=True)
+    print(f"[MO] energy diagram     -> {paths['diagram']}", flush=True)
+    if paths["cubes"]:
+        print(
+            f"[MO] {len(paths['cubes'])} cube file(s), indices "
+            f"{paths['selected_indices']} -> {paths['directory']}",
+            flush=True,
+        )
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
 
@@ -211,11 +282,12 @@ def main(argv=None):
         args.export_xyz,
         args.generate_active_spaces,
         args.analyze_active_spaces,
+        args.export_mos,
     )
     if sum(utility_modes) > 1:
         raise SystemExit(
             "Choose only one utility mode: --export-xyz, "
-            "--generate-active-spaces, or --analyze-active-spaces."
+            "--generate-active-spaces, --analyze-active-spaces, or --export-mos."
         )
 
     if args.generate_active_spaces:
@@ -243,6 +315,10 @@ def main(argv=None):
         for name, path in paths.items():
             print(f"[XYZ] {name} -> {path}", flush=True)
         print(f"[DONE] Exported {len(paths)} XYZ file(s).", flush=True)
+        return
+
+    if args.export_mos:
+        _run_orbital_export(args)
         return
 
     _apply_config(args)
