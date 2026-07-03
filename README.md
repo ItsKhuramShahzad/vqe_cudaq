@@ -45,6 +45,7 @@ vqe_cudaq/
 │   ├── __init__.py            # lazy exports; data/config import without CUDA-Q
 │   ├── config.py             # run settings (CLI overrides mutate these)
 │   ├── molecules.py          # molecule database (geometry + valid active spaces)
+│   ├── active_space.py       # CAS generation, validation, and analysis
 │   ├── xyz.py                # validated XYZ serialization and batch export
 │   ├── utils.py              # logging, filenames, pickling, stable hashing
 │   ├── backend.py            # CUDA-Q target selection + version tripwire
@@ -125,6 +126,46 @@ from vqe_cudaq.molecules import molecules
 write_xyz("Adenine", molecules["Adenine"], output_dir="xyz_files")
 write_all_xyz(molecules, output_dir="xyz_files")
 ```
+
+### Generate and analyze active spaces
+
+Generate configurations from explicit system dimensions:
+
+```bash
+python -m vqe_cudaq.cli --generate-active-spaces \
+    --total-orbitals 40 --total-electrons 15 --max-configs 30
+```
+
+Generate from one molecule's stored metadata, or analyze its curated spaces:
+
+```bash
+python -m vqe_cudaq.cli --generate-active-spaces --molecule Methylene
+python -m vqe_cudaq.cli --analyze-active-spaces --molecule Methylene
+python -m vqe_cudaq.cli --analyze-active-spaces --molecule Methylene --space_idx 0
+```
+
+From Python:
+
+```python
+from vqe_cudaq import analyze_active_space, generate_valid_active_spaces
+
+spaces = generate_valid_active_spaces(
+    total_orbitals=40,
+    total_electrons=15,
+    max_configs=30,
+)
+summary, accounted_electrons = analyze_active_space(
+    total_orbitals=40,
+    **spaces[0],
+    expected_total_electrons=15,
+)
+```
+
+Frozen-core orbitals are assumed doubly occupied. Generation preserves at
+least one unoccupied active orbital and one external virtual orbital. Molecule
+orbital counts are basis-dependent; use explicit `--total-orbitals` and
+`--total-electrons` values whenever the calculation basis differs from the
+metadata source.
 
 ---
 

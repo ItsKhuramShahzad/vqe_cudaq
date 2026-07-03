@@ -32,6 +32,11 @@ __all__ = [
     "write_all_xyz",
     "write_xyz",
     "xyz_text",
+    "analyze_active_space",
+    "generate_molecule_active_spaces",
+    "generate_valid_active_spaces",
+    "summarize_active_spaces",
+    "validate_active_space",
 ]
 
 
@@ -41,4 +46,13 @@ def __getattr__(name):
     if name in ("run_one_molecule", "run_all_molecules"):
         from . import driver
         return getattr(driver, name)
+    if name in (
+        "analyze_active_space",
+        "generate_molecule_active_spaces",
+        "generate_valid_active_spaces",
+        "summarize_active_spaces",
+        "validate_active_space",
+    ):
+        from . import active_space
+        return getattr(active_space, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
