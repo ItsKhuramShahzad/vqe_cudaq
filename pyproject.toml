@@ -29,7 +29,7 @@ dependencies = [
 # Interactive hover plots (analysis/scatter_interactive.py)
 interactive = ["plotly"]
 # Interactive molecular geometry visualization in Jupyter
-visualization = ["ipython", "py3Dmol", "rdkit"]
+visualization = ["ipython", "ipywidgets", "py3Dmol", "rdkit"]
 
 [project.scripts]
 vqe-cudaq = "vqe_cudaq.cli:main"

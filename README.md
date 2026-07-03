@@ -67,6 +67,8 @@ vqe_cudaq/
 │   └── latex_report.py       # full PGFPlots/LaTeX figure + report generator
 ├── scripts/
 │   └── dump_integrals.py
+├── notebooks/
+│   └── Molecular_Orbital_Visualization.ipynb
 ├── integrals/                # cached active-space integrals (.npz)
 ├── geometries( xyz_files)/
 └── results/                  # PKL outputs (git-ignored)
@@ -171,6 +173,10 @@ orbital counts are basis-dependent; use explicit `--total-orbitals` and
 metadata source.
 
 ### Inspect molecular orbitals before choosing an active space
+
+A complete ready-to-run Jupyter workflow is provided in
+[`notebooks/Molecular_Orbital_Visualization.ipynb`](notebooks/Molecular_Orbital_Visualization.ipynb).
+It exports every orbital and gives you a dropdown for interactive 3D viewing.
 
 Calculate one molecule and export all canonical MOs to Molden, a complete
 energy/occupation table, an energy-level diagram, and cube files around the
