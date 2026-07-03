@@ -1,5 +1,5 @@
 3
-CH2 | Method: (CCDST(T)/cc-pVDZ), Charge=0, Multiplicity=1
-C       0.000000      0.000000      0.111100
-H       0.000000      1.001473     -0.333299
-H       0.000000     -1.001473     -0.333299
+Methylene | Formula=CH2 | Method=CCSD(T)/cc-pVDZ | Charge=0 | Spin=2 | Multiplicity=3 | Units=angstrom | SourceUnits=angstrom
+C       0.00000000      0.00000000      0.11110000
+H       0.00000000      1.00150000     -0.33330000
+H       0.00000000     -1.00150000     -0.33330000

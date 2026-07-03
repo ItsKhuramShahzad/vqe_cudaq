@@ -45,6 +45,7 @@ vqe_cudaq/
 │   ├── __init__.py            # lazy exports; data/config import without CUDA-Q
 │   ├── config.py             # run settings (CLI overrides mutate these)
 │   ├── molecules.py          # molecule database (geometry + valid active spaces)
+│   ├── xyz.py                # validated XYZ serialization and batch export
 │   ├── utils.py              # logging, filenames, pickling, stable hashing
 │   ├── backend.py            # CUDA-Q target selection + version tripwire
 │   ├── operators.py          # qubit-op helpers + CCSD→UCCSD θ₀ packing
@@ -101,6 +102,29 @@ visualize_all(molecules, names=["Methylene", "Benzene", "Adenine"])
 Each molecule records its source coordinate unit explicitly. Bonds in these
 views are inferred from covalent radii for visualization only; they are not
 used by the VQE calculation.
+
+### Export XYZ geometry files
+
+XYZ files are always written in Ångström; source geometries stored in Bohr are
+converted automatically.
+
+```bash
+# Export all molecules
+python -m vqe_cudaq.cli --export-xyz --xyz-dir xyz_files
+
+# Export one molecule
+python -m vqe_cudaq.cli --export-xyz --molecule Adenine --xyz-dir xyz_files
+```
+
+The same operation is available from Python:
+
+```python
+from vqe_cudaq import write_all_xyz, write_xyz
+from vqe_cudaq.molecules import molecules
+
+write_xyz("Adenine", molecules["Adenine"], output_dir="xyz_files")
+write_all_xyz(molecules, output_dir="xyz_files")
+```
 
 ---
 

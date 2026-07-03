@@ -20,10 +20,19 @@ it in on first access::
 
 from . import config
 from .molecules import molecules
+from .xyz import write_all_xyz, write_xyz, xyz_text
 
 __version__ = "1.0.0"
 
-__all__ = ["molecules", "config", "run_one_molecule", "run_all_molecules"]
+__all__ = [
+    "molecules",
+    "config",
+    "run_one_molecule",
+    "run_all_molecules",
+    "write_all_xyz",
+    "write_xyz",
+    "xyz_text",
+]
 
 
 def __getattr__(name):

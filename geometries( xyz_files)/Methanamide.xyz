@@ -1,0 +1,8 @@
+6
+Methanamide | Formula=CHONH2 | Method=CCSD(T)=FULL/cc-pVDZ | Charge=0 | Spin=0 | Multiplicity=1 | Units=angstrom | SourceUnits=angstrom
+C       0.16390000      0.38930000      0.00130000
+O       1.20190000     -0.24730000      0.01030000
+N      -1.09850000     -0.15970000     -0.06700000
+H       0.13010000      1.50760000     -0.00100000
+H      -1.15880000     -1.15530000      0.13490000
+H      -1.88010000      0.40840000      0.24430000

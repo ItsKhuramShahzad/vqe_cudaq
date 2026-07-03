@@ -6,6 +6,8 @@ Examples
 --------
     python -m vqe_cudaq.cli --molecule Methylene --target nvidia --basis cc-pVDZ
     python -m vqe_cudaq.cli --all --target qpp-cpu --optimizer COBYLA
+    python -m vqe_cudaq.cli --export-xyz --xyz-dir xyz_files
+    python -m vqe_cudaq.cli --export-xyz --molecule Adenine
 """
 
 import os
@@ -15,7 +17,7 @@ import argparse
 from . import config
 from .molecules import molecules
 from .utils import sanitize_name, save_pkl
-from .driver import run_one_molecule, run_all_molecules
+from .xyz import write_all_xyz, write_xyz
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out_dir", default="pkl_results")
     p.add_argument("--space_idx", type=int, default=None,
                    help="Run only the i-th active space of a single molecule.")
+    p.add_argument("--export-xyz", "--export_xyz", action="store_true",
+                   help="Export molecular geometries as XYZ files instead of running VQE.")
+    p.add_argument("--xyz-dir", "--xyz_dir", default="xyz_files",
+                   help="XYZ output directory (default: xyz_files).")
     return p
 
 
@@ -48,10 +54,33 @@ def _apply_config(args):
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+
+    if args.export_xyz:
+        if args.molecule is not None:
+            if args.molecule not in molecules:
+                raise SystemExit(f"Molecule {args.molecule!r} not found.")
+            paths = {
+                args.molecule: write_xyz(
+                    args.molecule,
+                    molecules[args.molecule],
+                    output_dir=args.xyz_dir,
+                )
+            }
+        else:
+            paths = write_all_xyz(molecules, output_dir=args.xyz_dir)
+
+        for name, path in paths.items():
+            print(f"[XYZ] {name} -> {path}", flush=True)
+        print(f"[DONE] Exported {len(paths)} XYZ file(s).", flush=True)
+        return
+
     _apply_config(args)
 
     out_dir = args.out_dir
     os.makedirs(out_dir, exist_ok=True)
+
+    # Keep CUDA-Q and the VQE engine optional for geometry-only CLI use.
+    from .driver import run_one_molecule, run_all_molecules
 
     if args.all:
         run_all_molecules(molecules, out_dir=out_dir)
