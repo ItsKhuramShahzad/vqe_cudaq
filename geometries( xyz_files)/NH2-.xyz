@@ -1,0 +1,5 @@
+3
+NH2- | Formula=NH2- | Method=CCSD(T)/cc-pVDZ | Charge=-1 | Spin=0 | Multiplicity=1 | Units=angstrom | SourceUnits=angstrom
+N       0.00000000      0.00000000      0.15870000
+H       0.00000000      0.78540000     -0.55540000
+H       0.00000000     -0.78540000     -0.55540000

@@ -1,5 +1,6 @@
 molecules= {
    'NH3+': {'formula': 'NH3+',
+  'coordinate_unit': 'bohr',
   'charge': 1,
   'spin': 1,
   'multiplicity': 2,
@@ -22,6 +23,7 @@ molecules= {
 
 ]},
  'COO-': {'formula': 'COO-',
+  'coordinate_unit': 'bohr',
   'charge': -1,
   'spin': 1,
   'multiplicity': 2,
@@ -51,6 +53,7 @@ molecules= {
  {'ncore': 11, 'nele_cas': 2, 'norb_cas': 4}]},
 
  'Methylene': {'formula': 'CH2',
+  'coordinate_unit': 'angstrom',
   'canonical_formula': 'CH2',
   'name': 'methylene',
   'iupac_name': 'methylidene',
@@ -92,6 +95,7 @@ molecules= {
    {'ncore': 3, 'nele_cas': 2, 'norb_cas': 4}]},
  
  'Ethylene': {'formula': 'C2H4',
+  'coordinate_unit': 'angstrom',
   'canonical_formula': 'C2H4',
   'name': 'ethylene',
   'iupac_name': 'ethene',
@@ -148,6 +152,7 @@ molecules= {
    {'ncore': 7, 'nele_cas': 2, 'norb_cas': 4}]},
 
   'Methanamide': {'formula': 'CHONH2',
+  'coordinate_unit': 'angstrom',
   'canonical_formula': 'CH3NO',
   'name': 'formamide',
   'iupac_name': 'methanamide',
@@ -179,6 +184,7 @@ molecules= {
    {'ncore': 11, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 11, 'nele_cas': 2, 'norb_cas': 4}]},
  'NH2-': {'formula': 'NH2-',
+  'coordinate_unit': 'angstrom',
   'canonical_formula': 'H2N-',
   'name': 'amino anion',
   'iupac_name': 'azanide',
@@ -213,6 +219,7 @@ molecules= {
    {'ncore': 4, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 4, 'nele_cas': 2, 'norb_cas': 4}]},
  'Benzene': {'formula': 'C6H6',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -249,6 +256,7 @@ molecules= {
    {'ncore': 20, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 20, 'nele_cas': 2, 'norb_cas': 4}]},
  'Benzaanthracene': {'formula': 'C18H12',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -304,6 +312,7 @@ molecules= {
    {'ncore': 59, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 59, 'nele_cas': 2, 'norb_cas': 4}]},
  'Naphthalene': {'formula': 'C10H8',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -346,6 +355,7 @@ molecules= {
    {'ncore': 33, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 33, 'nele_cas': 2, 'norb_cas': 4}]},
  'Adenine': {'formula': 'C5H5N5',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -386,6 +396,7 @@ molecules= {
    {'ncore': 34, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 34, 'nele_cas': 2, 'norb_cas': 4}]},
  'Thymine': {'formula': 'C5H6N2O2',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -425,6 +436,7 @@ molecules= {
    {'ncore': 32, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 32, 'nele_cas': 2, 'norb_cas': 4}]},
  'Guanine': {'formula': 'C5H5N5O',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -465,6 +477,7 @@ molecules= {
    {'ncore': 38, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 38, 'nele_cas': 2, 'norb_cas': 4}]},
  'Cytosine': {'formula': 'C4H5N3O',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -502,6 +515,7 @@ molecules= {
    {'ncore': 28, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 28, 'nele_cas': 2, 'norb_cas': 4}]},
  'Uracil': {'formula': 'C4H4N2O2',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -538,6 +552,7 @@ molecules= {
    {'ncore': 28, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 28, 'nele_cas': 2, 'norb_cas': 4}]},  
   'Pentacene': {'formula': 'C22H14',
+  'coordinate_unit': 'angstrom',
   'charge': 0,
   'spin': 0,
   'multiplicity': 1,
@@ -611,5 +626,4 @@ molecules= {
 #    {'ncore': 72, 'nele_cas': 2, 'norb_cas': 2},
    {'ncore': 72, 'nele_cas': 2, 'norb_cas': 3},
    {'ncore': 72, 'nele_cas': 2, 'norb_cas': 4}]}
-}
- 
+ }
