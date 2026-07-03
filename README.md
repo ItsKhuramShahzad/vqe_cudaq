@@ -52,6 +52,7 @@ vqe_cudaq/
 │   ├── ansatz.py             # UCCSD / HEA kernels + energy expectation
 │   ├── vqe.py                # single-chunk / multi-cycle / jitter optimizers
 │   ├── insights.py           # PySCF/OpenFermion diagnostics
+│   ├── visualization.py      # interactive 3D molecular geometry views
 │   ├── driver.py             # run_one_molecule / run_all_molecules
 │   └── cli.py                # command-line entry point
 ├── analysis/                 # reporting tools (no CUDA-Q needed)
@@ -76,11 +77,30 @@ source .venv/bin/activate            # Linux / macOS
 pip install -e .                     # editable install of `vqe_cudaq`
 # or: pip install -r requirements.txt
 pip install -e ".[interactive]"      # + plotly for the interactive plots
+pip install -e ".[visualization]"    # + Jupyter 3D molecular visualization
 ```
 
 > **CUDA-Q** must be installed separately (see NVIDIA's instructions); it is not
 > pulled in by `pip` so installs succeed on non-NVIDIA machines. Use `nvidia`
 > for GPU and `qpp-cpu` for CPU-only runs.
+
+---
+
+## 🧬 Interactive 3D molecular geometries
+
+From a Jupyter notebook:
+
+```python
+from vqe_cudaq.molecules import molecules
+from vqe_cudaq.visualization import visualize_all, visualize_one
+
+visualize_one("Adenine", molecules)
+visualize_all(molecules, names=["Methylene", "Benzene", "Adenine"])
+```
+
+Each molecule records its source coordinate unit explicitly. Bonds in these
+views are inferred from covalent radii for visualization only; they are not
+used by the VQE calculation.
 
 ---
 
