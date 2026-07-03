@@ -11,5 +11,8 @@ scipy
 pandas
 matplotlib==3.8.4
 
+# Interactive analysis plots (analysis/scatter_interactive.py)
+plotly
+
 # CUDA-Q (must be installed separately following NVIDIA instructions)
 cuda-quantum

@@ -24,6 +24,9 @@ results/
 *.pkl
 *.csv
 
+# Temporary files left by interrupted NPZ writes
+*.npz.*
+
 # PySCF scratch
 /tmp/
 scratch/

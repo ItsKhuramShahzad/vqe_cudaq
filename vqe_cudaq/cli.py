@@ -1,153 +1,94 @@
-import argparse
+"""Command-line entry point.
+
+Overrides the run :mod:`config` from CLI flags, then dispatches to the driver.
+
+Examples
+--------
+    python -m vqe_cudaq.cli --molecule Methylene --target nvidia --basis cc-pVDZ
+    python -m vqe_cudaq.cli --all --target qpp-cpu --optimizer COBYLA
+"""
+
 import os
-import pickle
-from datetime import datetime
+import time
+import argparse
 
+from . import config
 from .molecules import molecules
-from .runner import run_molecule_all_spaces
+from .utils import sanitize_name, save_pkl
+from .driver import run_one_molecule, run_all_molecules
 
 
-def _save(results_obj, outdir, tag):
-    os.makedirs(outdir, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    outpath = os.path.join(outdir, f"{stamp}_{tag}_vqe.pkl")
-    with open(outpath, "wb") as f:
-        pickle.dump(results_obj, f)
-    print(f"[saved] {outpath}")
-    return outpath
-
-
-def _interactive_pick(prompt, options, default=None):
-    """
-    Show numbered options; return chosen value.
-    """
-    print(f"\n{prompt}")
-    for i, opt in enumerate(options, start=1):
-        print(f"  {i}. {opt}")
-    if default is not None:
-        print(f"Press Enter for default: {default}")
-
-    while True:
-        ans = input("Select option number: ").strip()
-        if ans == "" and default is not None:
-            return default
-        if ans.isdigit():
-            idx = int(ans)
-            if 1 <= idx <= len(options):
-                return options[idx - 1]
-        print("Invalid choice. Try again.")
-
-
-def _interactive_int(prompt, default):
-    while True:
-        ans = input(f"{prompt} [default={default}]: ").strip()
-        if ans == "":
-            return default
-        if ans.isdigit():
-            return int(ans)
-        print("Please enter an integer.")
-
-
-def _interactive_str(prompt, default):
-    ans = input(f"{prompt} [default={default}]: ").strip()
-    return default if ans == "" else ans
-
-
-def main():
-    mol_names = sorted(list(molecules.keys()))
-
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="VQE (CUDA-Q + OpenFermion/PySCF) runner"
-    )
-    mode = p.add_mutually_exclusive_group()
+        description="Active-space VQE benchmarking on CUDA-Q (CPU/GPU).")
+    p.add_argument("--molecule", default=None,
+                   help="Molecule name (see vqe_cudaq.molecules). Omit with --all.")
+    p.add_argument("--all", action="store_true",
+                   help="Run every molecule in the database.")
+    p.add_argument("--basis", default=config.BASIS)
+    p.add_argument("--target", default=config.TARGET,
+                   help='CUDA-Q target, e.g. "nvidia" or "qpp-cpu".')
+    p.add_argument("--precision", default="default",
+                   choices=["default", "fp32", "fp64"],
+                   help="CUDA-Q precision for the nvidia target.")
+    p.add_argument("--optimizer", default=config.OPTIMIZER)
+    p.add_argument("--out_dir", default="pkl_results")
+    p.add_argument("--space_idx", type=int, default=None,
+                   help="Run only the i-th active space of a single molecule.")
+    return p
 
-    mode.add_argument("--interactive", action="store_true",
-                      help="Ask prompts to choose molecule/target/etc.")
-    mode.add_argument("--molecule", type=str,
-                      help="Run one molecule by name (e.g., Methylene)")
-    mode.add_argument("--all", action="store_true",
-                      help="Run all molecules with all defined active spaces")
 
-    p.add_argument("--basis", default="cc-pVDZ")
-    p.add_argument("--target", default="nvidia",
-                   help="cudaq target: nvidia (GPU) or qpp (CPU simulator)")
-    p.add_argument("--maxiter", type=int, default=500)
-    p.add_argument("--method", default="COBYLA")
-    p.add_argument("--outdir", default="results")
+def _apply_config(args):
+    """Push CLI options into the shared config namespace."""
+    config.BASIS = args.basis
+    config.TARGET = args.target
+    config.OPTIMIZER = args.optimizer
+    config.TARGET_PRECISION = None if args.precision == "default" else args.precision
 
-    args = p.parse_args()
 
-    # -------- Interactive mode --------
-    if args.interactive:
-        run_mode = _interactive_pick(
-            "What do you want to run?",
-            options=["One molecule", "All molecules"],
-            default="One molecule",
-        )
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    _apply_config(args)
 
-        basis = _interactive_str("Basis set", args.basis)
-        target = _interactive_str("CUDA-Q target (nvidia/qpp)", args.target)
-        maxiter = _interactive_int("Max optimizer iterations", args.maxiter)
-        method = _interactive_str("Optimizer method (COBYLA, Nelder-Mead, etc.)", args.method)
-        outdir = _interactive_str("Output folder", args.outdir)
+    out_dir = args.out_dir
+    os.makedirs(out_dir, exist_ok=True)
 
-        if run_mode == "One molecule":
-            molecule = _interactive_pick(
-                "Select molecule:",
-                options=mol_names,
-                default="Methylene" if "Methylene" in mol_names else mol_names[0],
-            )
-            mol = molecules[molecule]
-            runs = run_molecule_all_spaces(
-                molecule, mol, basis=basis, target=target, maxiter=maxiter, method=method
-            )
-            _save(runs, outdir, tag=f"{molecule}_{basis}_{target}")
-
-        else:  # All molecules
-            all_results = {}
-            for molecule in mol_names:
-                mol = molecules[molecule]
-                print(f"\n=== Running {molecule} ===")
-                all_results[molecule] = run_molecule_all_spaces(
-                    molecule, mol, basis=basis, target=target, maxiter=maxiter, method=method
-                )
-            _save(all_results, outdir, tag=f"ALL_{basis}_{target}")
-
-        return
-
-    # -------- Non-interactive (CLI) mode --------
     if args.all:
-        all_results = {}
-        for molecule in mol_names:
-            mol = molecules[molecule]
-            print(f"\n=== Running {molecule} ===")
-            all_results[molecule] = run_molecule_all_spaces(
-                molecule, mol, basis=args.basis, target=args.target,
-                maxiter=args.maxiter, method=args.method
-            )
-        _save(all_results, args.outdir, tag=f"ALL_{args.basis}_{args.target}")
+        run_all_molecules(molecules, out_dir=out_dir)
         return
 
-    if args.molecule:
-        if args.molecule not in molecules:
-            raise ValueError(
-                f"Molecule '{args.molecule}' not found. Available: {', '.join(mol_names)}"
-            )
-        mol = molecules[args.molecule]
-        runs = run_molecule_all_spaces(
-            args.molecule, mol, basis=args.basis, target=args.target,
-            maxiter=args.maxiter, method=args.method
-        )
-        _save(runs, args.outdir, tag=f"{args.molecule}_{args.basis}_{args.target}")
-        return
+    if args.molecule is None:
+        raise SystemExit("Provide --molecule NAME or --all.")
 
-    # Default behavior if no mode chosen:
-    print("No mode selected. Use one of:")
-    print("  --interactive")
-    print("  --molecule <name>")
-    print("  --all")
-    print("\nExample:")
-    print("  python -m vqe_cudaq.cli --interactive")
+    molecule_name = args.molecule
+    if molecule_name not in molecules:
+        raise ValueError(f"Molecule '{molecule_name}' not found!")
+
+    spec = dict(molecules[molecule_name])
+
+    if args.space_idx is not None:
+        spaces = spec.get("valid_active_spaces", [])
+        if args.space_idx < 0 or args.space_idx >= len(spaces):
+            raise ValueError(f"--space_idx {args.space_idx} out of range")
+        spec["valid_active_spaces"] = [spaces[args.space_idx]]
+
+    print(
+        f"[RUN] {molecule_name} | BASIS={config.BASIS} | TARGET={config.TARGET} "
+        f"| PRECISION={config.TARGET_PRECISION or 'default'} | OPT={config.OPTIMIZER}",
+        flush=True,
+    )
+
+    mol_res = run_one_molecule(molecule_name, spec)
+
+    tag       = time.strftime("%d_%b_%Y").upper()
+    mol_clean = sanitize_name(molecule_name)
+    file_name = (
+        f"{tag}_{mol_clean}_{sanitize_name(config.BASIS)}_"
+        f"{sanitize_name(config.TARGET)}_{sanitize_name(config.OPTIMIZER)}_VQE_results.pkl"
+    )
+    out_path = os.path.join(out_dir, file_name)
+    save_pkl({molecule_name: mol_res}, out_path)
+    print(f"[DONE] Saved -> {out_path}", flush=True)
 
 
 if __name__ == "__main__":
