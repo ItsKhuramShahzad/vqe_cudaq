@@ -1,3 +1,10 @@
+"""Standalone active-space Hamiltonian builder.
+
+Used by ``scripts/dump_integrals.py`` to export one-/two-electron integrals per
+molecule, basis and active space. Kept separate from the driver, which builds
+its Hamiltonians inline (see :mod:`vqe_cudaq.driver` / :mod:`vqe_cudaq.operators`).
+"""
+
 import openfermion
 import openfermionpyscf
 from openfermion.transforms import jordan_wigner, get_fermion_operator

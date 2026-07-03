@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vqe_cudaq"
+version = "1.0.0"
+description = "Active-space VQE benchmarking of molecular ground-state energies on CUDA-Q (CPU/GPU)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Khuram Shahzad" }]
+keywords = ["VQE", "CUDA-Q", "quantum chemistry", "OpenFermion", "PySCF", "UCCSD"]
+
+# NOTE: CUDA-Q (`cuda-quantum`) must be installed separately per NVIDIA's
+# instructions; it is intentionally omitted here so `pip install` of this
+# package does not fail on non-NVIDIA systems.
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib==3.8.4",
+    "pyscf==2.6.2",
+    "openfermion==1.6.1",
+    "openfermionpyscf==0.5",
+]
+
+[project.optional-dependencies]
+# Interactive hover plots (analysis/scatter_interactive.py)
+interactive = ["plotly"]
+
+[project.scripts]
+vqe-cudaq = "vqe_cudaq.cli:main"
+
+[tool.setuptools]
+packages = ["vqe_cudaq", "analysis"]
