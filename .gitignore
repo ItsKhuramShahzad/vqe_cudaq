@@ -23,6 +23,9 @@ env/
 results/
 *.pkl
 *.csv
+molecular_orbitals/
+*.cube
+*.molden
 
 # Temporary files left by interrupted NPZ writes
 *.npz.*

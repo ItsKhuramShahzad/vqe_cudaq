@@ -20,7 +20,7 @@ it in on first access::
 
 from . import config
 from .molecules import molecules
-from .xyz import write_all_xyz, write_xyz, xyz_text
+from .xyz import convert_geometry_to_angstrom, write_all_xyz, write_xyz, xyz_text
 
 __version__ = "1.0.0"
 
@@ -32,11 +32,18 @@ __all__ = [
     "write_all_xyz",
     "write_xyz",
     "xyz_text",
+    "convert_geometry_to_angstrom",
     "analyze_active_space",
     "generate_molecule_active_spaces",
     "generate_valid_active_spaces",
     "summarize_active_spaces",
     "validate_active_space",
+    "export_orbital_bundle",
+    "frontier_orbital_indices",
+    "orbital_table",
+    "plot_orbital_energy_diagram",
+    "run_orbital_calculation",
+    "view_orbital_cube",
 ]
 
 
@@ -55,4 +62,14 @@ def __getattr__(name):
     ):
         from . import active_space
         return getattr(active_space, name)
+    if name in (
+        "export_orbital_bundle",
+        "frontier_orbital_indices",
+        "orbital_table",
+        "plot_orbital_energy_diagram",
+        "run_orbital_calculation",
+        "view_orbital_cube",
+    ):
+        from . import orbitals
+        return getattr(orbitals, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

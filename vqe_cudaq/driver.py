@@ -27,6 +27,7 @@ from .operators import (
 )
 from .ansatz import hea_num_parameters
 from .vqe import best_of_jitters_one_chunk, vqe_until_converged
+from .xyz import geometry_in_angstrom
 
 
 def run_one_molecule(mol_name: str, spec: dict):
@@ -59,7 +60,9 @@ def run_one_molecule(mol_name: str, spec: dict):
 
     mol_name_clean = sanitize_name(mol_name)
 
-    geometry = spec["geometry"]
+    # OpenFermion MolecularData interprets coordinates as angstrom.  Normalize
+    # explicitly because a few database geometries are recorded in bohr.
+    geometry = geometry_in_angstrom(spec)
     charge = int(spec["charge"])
     multiplicity = int(spec["multiplicity"])
 

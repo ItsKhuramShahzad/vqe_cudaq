@@ -16,16 +16,12 @@ BOHR_TO_ANGSTROM = 0.529177210903
 VALID_COORDINATE_UNITS = {"angstrom", "bohr"}
 
 
-def geometry_in_angstrom(
-    data: Mapping[str, Any],
+def convert_geometry_to_angstrom(
+    geometry: Sequence[tuple[str, Sequence[float]]],
+    source_unit: str = "angstrom",
 ) -> list[tuple[str, tuple[float, float, float]]]:
-    """Return validated geometry coordinates converted to angstrom."""
-    if "geometry" not in data:
-        raise KeyError("Molecule data does not contain 'geometry'.")
-    if "coordinate_unit" not in data:
-        raise KeyError("Molecule data does not contain 'coordinate_unit'.")
-
-    source_unit = str(data["coordinate_unit"]).lower()
+    """Validate a geometry and convert it from ``source_unit`` to angstrom."""
+    source_unit = str(source_unit).lower()
     if source_unit not in VALID_COORDINATE_UNITS:
         raise ValueError(
             f"Unsupported coordinate unit {source_unit!r}; "
@@ -34,7 +30,7 @@ def geometry_in_angstrom(
 
     scale = BOHR_TO_ANGSTROM if source_unit == "bohr" else 1.0
     converted = []
-    for atom_index, entry in enumerate(data["geometry"]):
+    for atom_index, entry in enumerate(geometry):
         if len(entry) != 2:
             raise ValueError(f"Invalid geometry entry at atom {atom_index}: {entry!r}")
         symbol, coordinates = entry
@@ -48,6 +44,21 @@ def geometry_in_angstrom(
     if not converted:
         raise ValueError("The molecular geometry is empty.")
     return converted
+
+
+def geometry_in_angstrom(
+    data: Mapping[str, Any],
+) -> list[tuple[str, tuple[float, float, float]]]:
+    """Return validated geometry coordinates converted to angstrom."""
+    if "geometry" not in data:
+        raise KeyError("Molecule data does not contain 'geometry'.")
+    if "coordinate_unit" not in data:
+        raise KeyError("Molecule data does not contain 'coordinate_unit'.")
+
+    return convert_geometry_to_angstrom(
+        data["geometry"],
+        source_unit=str(data["coordinate_unit"]),
+    )
 
 
 def xyz_text(
@@ -132,6 +143,7 @@ def write_all_xyz(
 
 __all__ = [
     "BOHR_TO_ANGSTROM",
+    "convert_geometry_to_angstrom",
     "geometry_in_angstrom",
     "write_all_xyz",
     "write_xyz",

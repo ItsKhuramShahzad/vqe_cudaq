@@ -10,8 +10,20 @@ import openfermionpyscf
 from openfermion.transforms import jordan_wigner, get_fermion_operator
 import cudaq
 
+from .xyz import convert_geometry_to_angstrom
 
-def molecularHamiltonian(geometry, basis, multiplicity, charge, ncore=0, nele_cas=0, norb_cas=0, ac=True):
+
+def molecularHamiltonian(
+    geometry,
+    basis,
+    multiplicity,
+    charge,
+    ncore=0,
+    nele_cas=0,
+    norb_cas=0,
+    ac=True,
+    coordinate_unit="angstrom",
+):
     # Run PySCF via OpenFermion to get molecular data for given geometry and basis
     """
     Build molecular and qubit Hamiltonians using OpenFermion + PySCF.
@@ -26,7 +38,10 @@ def molecularHamiltonian(geometry, basis, multiplicity, charge, ncore=0, nele_ca
         hf_energy
         ccsd_energy (placeholder)
     """
-    molecule = openfermionpyscf.run_pyscf(openfermion.MolecularData(geometry, basis, multiplicity, charge)) 
+    geometry = convert_geometry_to_angstrom(geometry, coordinate_unit)
+    molecule = openfermionpyscf.run_pyscf(
+        openfermion.MolecularData(geometry, basis, multiplicity, charge)
+    )
 
     total_orbitals = molecule.n_orbitals
     total_electrons = molecule.n_electrons
