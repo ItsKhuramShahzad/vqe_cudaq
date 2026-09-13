@@ -285,5 +285,6 @@ parameter counts, convergence history, and CPU/GPU runtime breakdowns.
 ## 👤 Author
 
 **Khuram Shahzad** — PhD Researcher, Quantum Computing for Quantum Chemistry
+
 **[Prof. Rosa Di Felice]([url](https://dornsife.usc.edu/profile/rosa-di-felice/))** — Professor of Physics and Astronomy and Quantitative and Computational Biology
 
