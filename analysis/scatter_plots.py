@@ -156,7 +156,10 @@ SPECS = [
          ylabel=r"GPU speedup $t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$",
          xlabel_mpl=r"Active-space size (qubits $= 2N_o$)",
          ylabel_mpl=r"GPU speedup $t_{CPU}/t_{GPU}$",
-         logy=False, parity=False, hline=1.0),
+         logy=False, parity=False, hline=1.0,
+         grid=False, legend_inside=True, tex_compat="1.17",
+         tex_width="13.5cm", tex_height="13cm",
+         tex_font=r"\footnotesize", tex_mark_size="2.1pt"),
     dict(key="scatter9_corrRecovery_vs_speedup", x=SPD, y=CORR,
          xlabel=r"GPU speedup $t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$",
          ylabel=r"Correlation recovery $(E_{\mathrm{VQE}}^{\mathrm{GPU}}-E_{\mathrm{HF}})/E_{\mathrm{VQE}}^{\mathrm{GPU}}$",
@@ -229,14 +232,21 @@ def draw_mpl_axis(ax, df, present, spec):
                    label=spec.get("hline_label", f"break-even ({spec['hline']:g})"))
     ax.set_xlabel(spec["xlabel_mpl"])
     ax.set_ylabel(spec["ylabel_mpl"])
-    ax.grid(True, ls=":", color="0.8")
+    if spec.get("grid", True):
+        ax.grid(True, ls=":", color="0.8")
+    else:
+        ax.grid(False, which="both")
 
 
 def make_png(df, present, spec):
     fig, ax = plt.subplots(figsize=(7.2, 5.0))
     draw_mpl_axis(ax, df, present, spec)
-    ax.legend(fontsize=7, ncol=2, loc="center left",
-              bbox_to_anchor=(1.01, 0.5), frameon=False)
+    if spec.get("legend_inside"):
+        ax.legend(fontsize=8, ncol=2, loc="upper left",
+                  bbox_to_anchor=(0.02, 0.98), frameon=False)
+    else:
+        ax.legend(fontsize=7, ncol=2, loc="center left",
+                  bbox_to_anchor=(1.01, 0.5), frameon=False)
     fig.tight_layout()
     for ext in ("png", "pdf"):
         out = os.path.join(PNG_DIR, f"{spec['key']}.{ext}")
@@ -283,13 +293,29 @@ def fmt_coords(sub, xcol, ycol):
 
 def make_tex(df, present, spec):
     axis_opts = [
-        "width=11cm", "height=7.5cm",
+        f"width={spec.get('tex_width', '11cm')}",
+        f"height={spec.get('tex_height', '7.5cm')}",
         f"xlabel={{{spec['xlabel']}}}", f"ylabel={{{spec['ylabel']}}}",
         "legend pos=outer north east", "legend cell align=left",
         "legend columns=1", "scatter/use mapped color=false",
     ]
     if spec["logy"]:
         axis_opts.append("ymode=log")
+    if not spec.get("grid", True):
+        axis_opts.append("grid=none")
+    if "tex_font" in spec:
+        axis_opts.extend([
+            f"tick label style={{font={spec['tex_font']}}}",
+            f"label style={{font={spec['tex_font']}}}",
+        ])
+    if spec.get("legend_inside"):
+        legend_font = spec.get("tex_font", r"\scriptsize")
+        axis_opts.extend([
+            "legend columns=2",
+            r"legend style={at={(0.03,0.97)}, anchor=north west, "
+            f"draw=none, fill=none, font={legend_font}, "
+            r"/tikz/column 2/.style={column sep=8pt}}",
+        ])
 
     body = "\\begin{tikzpicture}\n\\begin{axis}[\n  "
     body += ",\n  ".join(axis_opts) + ",\n]\n"
@@ -302,7 +328,8 @@ def make_tex(df, present, spec):
         color = TIKZ_COLORS[i % len(TIKZ_COLORS)]
         mark  = TIKZ_MARKS[i % len(TIKZ_MARKS)]
         body += (f"\\addplot[only marks, color={color}, mark={mark}, "
-                 f"mark size=1.7pt, mark options={{draw=black, line width=0.2pt}}] "
+                 f"mark size={spec.get('tex_mark_size', '1.7pt')}, "
+                 f"mark options={{draw=black, line width=0.2pt}}] "
                  f"coordinates {{{coords}}};\n")
         body += f"\\addlegendentry{{{display(mol, tex=True)}}}\n"
 
@@ -322,9 +349,22 @@ def make_tex(df, present, spec):
 
     body += "\\end{axis}\n\\end{tikzpicture}\n"
 
-    write(os.path.join(TEX_DIR, spec["key"] + ".tex"), HEADER + body + FOOTER)
+    header = HEADER
+    header_embed = HEADER_EMBED
+    if "tex_compat" in spec:
+        header = header.replace("compat=1.18", f"compat={spec['tex_compat']}")
+        header_embed = header_embed.replace(
+            "compat=1.18", f"compat={spec['tex_compat']}"
+        )
+    if not spec.get("grid", True):
+        header = header.replace("grid=both, grid style={dotted,gray!30}", "grid=none")
+        header_embed = header_embed.replace(
+            "grid=both, grid style={dotted,gray!30}", "grid=none"
+        )
+    write(os.path.join(TEX_DIR, spec["key"] + ".tex"), header + body + FOOTER)
+    # Keep this figure's axis defaults local when included in a manuscript.
     write(os.path.join(TEX_DIR, spec["key"] + "_embed.tex"),
-          HEADER_EMBED + body + FOOTER_EMBED)
+          "\\begingroup\n" + header_embed + body + FOOTER_EMBED + "\\endgroup\n")
 
 
 def write(path, content):

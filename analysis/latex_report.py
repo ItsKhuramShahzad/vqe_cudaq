@@ -2476,17 +2476,13 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         r"    line width=0.9pt, mark size=4pt, rotate=90, blue!70!black}," + "\n"
         r"  legend style={at={(0.5,-0.52)}, anchor=north, legend columns=4, font=\tiny}," + "\n"
         r"]" + "\n"
-        # Whisker (min->max range), central marker hidden.
-        # forget plot keeps the whisker out of the legend counter.
-        f"\\addplot+[only marks, mark=none, blue!70!black, forget plot]"
-        f" plot coordinates {{{sp_whisker_coords}}};\n"
-        # Dots colored by (Ne, No) active-space configuration (red→green).
+        # Dots colored by (Ne, No) active-space configuration (red->violet).
+        # Min/max whisker removed per request.
         + colored_dot_addplots(mol_labels, sp_as, sp_all)
         + r"\end{axis}\end{tikzpicture}" + "\n"
-        r"\caption{GPU speedup distribution across all active-space configurations:"
+        r"\caption{GPU speedup ($t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$) per molecule:"
         r" each marker is one $(N_e^{(a)},N_o^{(a)})$ configuration (color-coded"
-        r" red $\to$ violet by active-space size); the whisker spans the min/max"
-        r" of $t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$ per molecule.}" + "\n"
+        r" red $\to$ violet by active-space size).}" + "\n"
         r"\end{subfigure}\hfill" + "\n"
     )
 
@@ -2539,10 +2535,8 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         r"  error bars/error mark options={" + "\n"
         r"    line width=0.8pt, mark size=3pt, rotate=90, orange!80!black}," + "\n"
         r"]" + "\n"
-        # Whisker (min->max range), central marker hidden.
-        f"\\addplot+[only marks, mark=none, orange!80!black, forget plot]"
-        f" plot coordinates {{{dE_whisker_coords}}};\n"
         # Dots colored by (Ne, No) active-space configuration (red->violet).
+        # Min/max whisker removed per request.
         + colored_dot_addplots(mol_labels_b, dE_as_b, dE_all_b)
         + r"\addplot[thick, red, dashed, line width=1.1pt, mark=none]"
         + f" coordinates {{({{{mol_labels_b[0]}}},1.6) ({{{mol_labels_b[-1]}}},1.6)}};\n"
@@ -2553,8 +2547,8 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         + f" coordinates {{({{{mol_labels_b[0]}}},0) ({{{mol_labels_b[-1]}}},0)}};\n"
         r"\end{axis}\end{tikzpicture}" + "\n"
         r"\caption{CPU--GPU agreement distribution: each marker is one" + "\n"
-        r"$(N_e^{(a)},N_o^{(a)})$ configuration; the whisker spans the min/max" + "\n"
-        r"of $|\Delta E_{\mathrm{GPU-CPU}}|$ across all" + "\n"
+        r"$(N_e^{(a)},N_o^{(a)})$ configuration of" + "\n"
+        r"$|\Delta E_{\mathrm{GPU-CPU}}|$ across all" + "\n"
         r"paired active-space configs per molecule. All remaining configurations" + "\n"
         r"lie below the red dashed chemical-accuracy threshold (1.6\,mHa)," + "\n"
         r"confirming GPU introduces no chemically meaningful numerical error."
@@ -2663,11 +2657,11 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         + "\n"
         + r"\caption{GPU-acceleration performance summary."
         + r" (a)~GPU speedup distribution (one dot per active-space"
-        + r" configuration, min/max whiskers)"
+        + r" configuration)"
         + r" of $t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$ across all active-space"
         + r" configurations per molecule."
         + r" (b)~CPU--GPU numerical agreement distribution"
-        + r" (one dot per configuration, min/max whiskers):"
+        + r" (one dot per configuration):"
         + r" $|\Delta E_{\mathrm{GPU-CPU}}|$ [mHa] across all configurations;"
         + r" dashed red line marks chemical accuracy (1.6\,mHa), which all"
         + r" configurations for all molecules lie below."
@@ -2683,7 +2677,7 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         + r" In panels~(a), (b) and~(d) each dot is one active-space"
         + r" configuration, coloured on a red$\to$violet scale by active-space"
         + r" size (smallest $(2,3)$ red $\to$ largest $(6,7)$ violet); panel~(b)"
-        + r" excludes Methylene for scale (see its sub-caption)."
+        + r"  Methylene is omitted here for scale: its $|\Delta E_{\mathrm{GPU-CPU}}|$ ranges 13.86--15.24\,mHa (median 14.44\,mHa).."
         + r" See Fig.~\ref{fig:accuracy_summary} for CCSD-accuracy comparison"
         + r" and multi-metric normalised view.}" + "\n"
         + r"\label{fig:performance_summary}" + "\n"
@@ -2727,8 +2721,8 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
 
     cap_ab = (
         r"\caption{GPU-acceleration performance (part~1)."
-        + r" (a)~GPU speedup distribution (one dot per active-space configuration,"
-        + r" min/max whiskers) of $t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$ across all"
+        + r" (a)~GPU speedup (one dot per active-space configuration)"
+        + r" of $t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$ across all"
         + r" configurations per molecule."
         + r" (b)~CPU--GPU numerical agreement distribution:"
         + r" $|\Delta E_{\mathrm{GPU-CPU}}|$ [mHa] across all configurations;"
@@ -3632,6 +3626,168 @@ def fig18_runtime_breakdown(cpu, gpu, molecules, outdir):
     )
     write_both(outdir, "fig18_runtime_breakdown", body.replace(HEADER, "").replace(HEADER_SUBCAP, "").replace(FOOTER, "").strip())
 
+
+
+# ══════════════════════════════════════════════════════════════════
+#  FIG 18b -- runtime separated into quantum vs optimizer components
+# ══════════════════════════════════════════════════════════════════
+
+def fig18b_runtime_components(cpu, gpu, molecules, outdir):
+    """
+    Separates the measured VQE runtime into its two recorded components,
+    for both devices, one panel per molecule:
+
+        solid  + circle   quantum-circuit simulation time
+        dashed + square   classical optimizer/control time
+        blue = CPU run    red = GPU run
+
+    Added ALONGSIDE fig18_runtime_breakdown, which is left exactly as it
+    was.  fig18 is the original stacked-bar version; it has four defects
+    that this figure avoids:
+      1. `ybar stacked` + `ymode=log` on the same axis: the GPU-total series
+         was added inside that axis, so pgfplots stacked it and each red
+         marker was drawn at (CPU_total + GPU_total) instead of GPU_total.
+      2. The grey "overhead" slice is identically zero in every matched pair
+         (runtime == rt_q + rt_opt exactly); clamped to 0.001 s it rendered
+         on a log axis as a full-height column meaning "zero".
+      3. Molecule names sat at (0.02,0.02), underneath those grey columns.
+      4. \\resizebox{1.1\\textwidth} overflowed the text block, clipping col 4.
+
+    The y axis must be logarithmic: the two components differ by a median
+    factor of ~600 and span up to 6.5 decades within a single molecule.  That
+    is legal for marks, which encode POSITION; it is what broke the bars,
+    which encode LENGTH FROM ZERO and have no anchor on a log axis.
+    """
+    print("\n[Fig 18b] Runtime components (quantum vs optimizer, CPU vs GPU) …")
+    NCOLS, NROWS = 4, 4
+
+    C_CPU = "blue!70!black"
+    C_GPU = "red!75!black"
+    M_Q   = ("mark=*,mark size=1.6pt,line width=0.4pt,"
+             "mark options={draw=black,line width=0.2pt}")
+    M_O   = ("mark=square*,mark size=1.6pt,line width=0.4pt,densely dashed,"
+             "mark options={draw=black,line width=0.2pt,solid}")
+    # A cell with frame/ticks/grid off.  `hide axis` would be shorter but it
+    # also suppresses the legend, so the pieces are switched off one by one.
+    BLANK = ("  ymode=normal, xmin=0, xmax=1, ymin=0, ymax=1,\n"
+             "  axis line style={draw=none}, tick style={draw=none},\n"
+             "  xtick=\\empty, ytick=\\empty, ylabel={},\n"
+             "  xmajorgrids=false, ymajorgrids=false")
+
+    def plot(color, style, pts):
+        return f"\\addplot[color={color},{style}] coordinates {{{' '.join(pts)}}};\n"
+
+    blocks = []
+    for mol in molecules:
+        pairs = pair_runs(cpu[mol]["runs"], gpu[mol]["runs"])
+        if not pairs:
+            continue
+        pairs.sort(key=lambda p: (p["ne"], p["no"]))
+
+        sym_coords, sym_labels = [], []
+        cq, co, gq, go = [], [], [], []
+        for p in pairs:
+            sc = sym(p["ne"], p["no"])
+            cr, gr = p["cpu"], p["gpu"]
+            sym_coords.append(sc)
+            sym_labels.append(p["label"])
+            if cr.get("rt_q"):
+                cq.append(f"({sc},{cr['rt_q']:.6f})")
+            if cr.get("rt_opt"):
+                co.append(f"({sc},{cr['rt_opt']:.6f})")
+            if gr.get("rt_q"):
+                gq.append(f"({sc},{gr['rt_q']:.6f})")
+            if gr.get("rt_opt"):
+                go.append(f"({sc},{gr['rt_opt']:.6f})")
+
+        ylabel_18 = "" if len(blocks) % NCOLS == 0 else "  ylabel={},\n"
+        blocks.append(
+            f"% === {mol} ===\n"
+            f"\\nextgroupplot[\n"
+            f"  symbolic x coords={{{','.join(sym_coords)}}},\n"
+            f"  xticklabels={{{','.join(sym_labels)}}},\n"
+            f"  xtick=data,\n"
+            f"  xticklabel style={{font=\\tiny, rotate=45, anchor=east}},\n"
+            f"{ylabel_18}]\n"
+            + plot(C_CPU, M_Q, cq)
+            + plot(C_GPU, M_Q, gq)
+            + plot(C_CPU, M_O, co)
+            + plot(C_GPU, M_O, go)
+            # Name inside the panel, top-centre.  Emitted AFTER the \addplots
+            # so it draws over them (same z-order reason as mol_label_node);
+            # `enlarge y limits` below reserves the headroom, and the white
+            # backing is the last resort.  mol_label_node() is not used here
+            # only because it offers no fill.
+            + "\\node[anchor=north, font=\\scriptsize\\bfseries, fill=white,\n"
+              "  fill opacity=0.75, text opacity=1, inner sep=1.5pt]\n"
+              f"  at (rel axis cs:0.5,0.99) {{{display(mol)}}};\n"
+        )
+
+    if not blocks:
+        print("  SKIP -- no runtime data.")
+        return
+
+    # Shared legend.  \addlegendimage reuses M_Q / M_O, so a swatch can never
+    # disagree with the curve it stands for.
+    blocks.append(
+        "% === shared legend ===\n"
+        "\\nextgroupplot[\n" + BLANK + ",\n"
+        "  legend style={at={(0.5,0.5)}, anchor=center, draw=gray!50,\n"
+        "                legend cell align=left, row sep=2.5pt,\n"
+        "                font=\\scriptsize, fill=white},\n"
+        "]\n"
+        + f"\\addlegendimage{{color={C_CPU},{M_Q}}}\n"
+          r"\addlegendentry{CPU -- quantum simulation}" + "\n"
+        + f"\\addlegendimage{{color={C_GPU},{M_Q}}}\n"
+          r"\addlegendentry{GPU -- quantum simulation}" + "\n"
+        + f"\\addlegendimage{{color={C_CPU},{M_O}}}\n"
+          r"\addlegendentry{CPU -- classical optimizer/control}" + "\n"
+        + f"\\addlegendimage{{color={C_GPU},{M_O}}}\n"
+          r"\addlegendentry{GPU -- classical optimizer/control}" + "\n"
+    )
+    while len(blocks) < NCOLS * NROWS:          # keep the grid rectangular
+        blocks.append("\\nextgroupplot[\n" + BLANK + "]\n")
+
+    n_pairs = sum(len(pair_runs(cpu[m]["runs"], gpu[m]["runs"])) for m in molecules)
+
+    body = (
+        HEADER
+        + r"\begin{figure*}[htbp]" + "\n"
+        + r"\centering\resizebox{\textwidth}{!}{%" + "\n"
+        + r"\begin{tikzpicture}" + "\n"
+        + r"\begin{groupplot}[" + "\n"
+        + f"  group style={{group size={NCOLS} by {NROWS},"
+        + r"horizontal sep=1.9cm,vertical sep=1.7cm}," + "\n"
+        + r"  width=0.27\textwidth, height=0.32\textwidth," + "\n"
+        + r"  ymode=log," + "\n"
+        + r"  enlarge y limits={upper,value=0.15}," + "\n"
+        + r"  tick label style={font=\scriptsize}," + "\n"
+        + r"  label style={font=\scriptsize}," + "\n"
+        + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
+        + r"  ylabel={Component time [s]}," + "\n"
+        + "]\n\n"
+        + "\n".join(blocks)
+        + r"\end{groupplot}" + "\n"
+        + r"\end{tikzpicture}" + "\n"
+        + r"}" + "\n"
+        + r"\caption{Separation of the measured VQE wall-clock runtime into its"
+        + r" two constituent parts -- the quantum-circuit simulation and the"
+        + r" classical optimizer/control -- for every active-space configuration"
+        + f" $(N_e^{{(a)}},N_o^{{(a)}})$, across all {n_pairs} matched"
+        + r" configurations. Circles joined by solid lines are the accumulated"
+        + r" quantum-simulation time; squares joined by dashed lines are the"
+        + r" classical optimizer/control time. Blue denotes the CPU run and red"
+        + r" the GPU run of the same configuration. Within each device the two"
+        + r" components account for that device's total runtime exactly, so"
+        + r" these runs carry no separate residual-overhead component. The"
+        + r" vertical axes are logarithmic.}" + "\n"
+        + r"\label{fig:runtime_components}" + "\n"
+        + r"\end{figure*}" + "\n"
+        + FOOTER
+    )
+    write_both(outdir, "fig18b_runtime_components",
+               body.replace(HEADER, "").replace(HEADER_SUBCAP, "")
+                   .replace(FOOTER, "").strip())
 
 # ══════════════════════════════════════════════════════════════════
 #  FIG 19 -- CCSD T1 / T2 DIAGNOSTICS  (multireference character)
@@ -4755,9 +4911,9 @@ def cli():
     p.add_argument("--figs",   nargs="*",
                    default=["1","2","3","4","5","6","7","8","9",
                             "10","11","12","13","14","15","16",
-                            "17","18","19","20","21","22","23","24","25",
+                            "17","18","18b","19","20","21","22","23","24","25",
                             "A","B","C","D","E","F","G","H"],
-                   help="Which figures to generate  [1..20, A..H]")
+                   help="Which figures to generate  [1..25, 18b, A..H]")
     p.add_argument("--no_table", action="store_true",
                    help="Skip terminal summary table")
     return p.parse_args()
@@ -4811,6 +4967,7 @@ def main():
         # ── New research analyses (from pkl internals) ────────────
         "17": fig17_convergence_curves,      # VQE energy vs iteration convergence
         "18": fig18_runtime_breakdown,       # Stacked: quantum/optimizer/overhead
+        "18b": fig18b_runtime_components,     # quantum vs optimizer time, CPU vs GPU
         "19": fig19_ccsd_diagnostics,        # T1/T2 norms -- multireference character
         "20": fig20_circuit_complexity,      # n_params + ham_terms vs qubits scatter
         "21": fig21_correlation_recovery_log, # log-scale version of fig12
