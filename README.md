@@ -18,9 +18,8 @@ across:
 
 ## 🧪 Benchmark molecules
 
-The 12 closed-shell molecules of the benchmark (cc-pVDZ, 9 active spaces each, 6 to
-14 qubits). Geometries are in `vqe_cudaq/molecules.py` and as XYZ files in
-`geometries( xyz_files)/`.
+12 closed-shell molecules, cc-pVDZ basis. Geometries are from NIST CCCBDB or PubChem, as
+recorded in `vqe_cudaq/molecules.py` (also as XYZ files in `geometries( xyz_files)/`).
 
 **Hydrocarbons**
 
@@ -54,6 +53,28 @@ The 12 closed-shell molecules of the benchmark (cc-pVDZ, 9 active spaces each, 6
     <td align="center"><img src="geometries(%20xyz_files)/images/Uracil.png" height="90" alt="Uracil"><br><b>Uracil</b><br><sub>C<sub>4</sub>H<sub>4</sub>N<sub>2</sub>O<sub>2</sub></sub></td>
   </tr>
 </table>
+
+| Molecule | Formula | Electrons | Orbitals (cc-pVDZ) | Geometry |
+|---|---|---:|---:|---|
+| Ethylene | C<sub>2</sub>H<sub>4</sub> | 16 | 48 | NIST CCCBDB |
+| Benzene | C<sub>6</sub>H<sub>6</sub> | 42 | 114 | NIST CCCBDB |
+| Naphthalene | C<sub>10</sub>H<sub>8</sub> | 68 | 180 | NIST CCCBDB |
+| Tetracene | C<sub>18</sub>H<sub>12</sub> | 120 | 312 | NIST CCCBDB |
+| Pentacene | C<sub>22</sub>H<sub>14</sub> | 146 | 378 | PubChem |
+| Amide anion | NH<sub>2</sub><sup>&minus;</sup> | 10 | 24 | NIST CCCBDB |
+| Methanamide | HCONH<sub>2</sub> | 24 | 57 | NIST CCCBDB |
+| Guanine | C<sub>5</sub>H<sub>5</sub>N<sub>5</sub>O | 78 | 179 | PubChem |
+| Cytosine | C<sub>4</sub>H<sub>5</sub>N<sub>3</sub>O | 58 | 137 | PubChem |
+| Adenine | C<sub>5</sub>H<sub>5</sub>N<sub>5</sub> | 70 | 165 | PubChem |
+| Thymine | C<sub>5</sub>H<sub>6</sub>N<sub>2</sub>O<sub>2</sub> | 66 | 156 | PubChem |
+| Uracil | C<sub>4</sub>H<sub>4</sub>N<sub>2</sub>O<sub>2</sub> | 58 | 132 | PubChem |
+
+Each molecule has the same 9 active spaces, from 6 to 14 qubits, written as
+(active electrons, active orbitals):
+
+| Qubits | 6 | 8 | 10 | 12 | 14 |
+|---|---|---|---|---|---|
+| Active spaces | (2,3), (4,3) | (2,4), (4,4), (6,4) | (4,5), (6,5) | (6,6) | (6,7) |
 
 ---
 

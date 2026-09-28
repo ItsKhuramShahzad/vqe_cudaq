@@ -70,6 +70,8 @@ molecules= {
   'point_group': 'C1',
   'inchi': 'InChI=1S/CH3NO/c2-1-3/h1H,(H2,2,3)',
   'inchi_key': 'ZHNUHDYFZUAESO-UHFFFAOYSA-N',
+  'source': 'NIST CCCBDB',
+  'source_url': 'https://cccbdb.nist.gov/',
   'geometry': [('C', (0.1639, 0.3893, 0.0013)),
    ('O', (1.2019, -0.2473, 0.0103)),
    ('N', (-1.0985, -0.1597, -0.067)),
