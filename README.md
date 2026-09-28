@@ -10,9 +10,50 @@ open-shell **HEA** fallback), and runs on both **GPU (`nvidia`)** and
 **CPU (`qpp-cpu`)** CUDA-Q backends for systematic CPU-vs-GPU benchmarking
 across:
 
-- multiple molecules (15 built in)
+- the 12 benchmark molecules (hydrocarbons, nitrogen/amide systems, nucleobases)
 - multiple active-space selections `(ncore, nele_cas, norb_cas)`
 - CPU vs GPU backends and precisions
+
+---
+
+## 🧪 Benchmark molecules
+
+The 12 closed-shell molecules of the benchmark (cc-pVDZ, 9 active spaces each, 6 to
+14 qubits). Geometries are in `vqe_cudaq/molecules.py` and as XYZ files in
+`geometries( xyz_files)/`.
+
+**Hydrocarbons**
+
+<table>
+  <tr>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Ethylene.png" height="90" alt="Ethylene"><br><b>Ethylene</b><br><sub>C<sub>2</sub>H<sub>4</sub></sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Benzene.png" height="90" alt="Benzene"><br><b>Benzene</b><br><sub>C<sub>6</sub>H<sub>6</sub></sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Naphthalene.png" height="90" alt="Naphthalene"><br><b>Naphthalene</b><br><sub>C<sub>10</sub>H<sub>8</sub></sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Tetracene.png" height="90" alt="Tetracene"><br><b>Tetracene</b><br><sub>C<sub>18</sub>H<sub>12</sub></sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Pentacene.png" height="90" alt="Pentacene"><br><b>Pentacene</b><br><sub>C<sub>22</sub>H<sub>14</sub></sub></td>
+  </tr>
+</table>
+
+**Nitrogen and amide systems**
+
+<table>
+  <tr>
+    <td align="center"><img src="geometries(%20xyz_files)/images/NH2-.png" height="90" alt="Amide anion"><br><b>Amide anion</b><br><sub>NH<sub>2</sub><sup>&minus;</sup></sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Methanamide.png" height="90" alt="Methanamide"><br><b>Methanamide</b><br><sub>HCONH<sub>2</sub></sub></td>
+  </tr>
+</table>
+
+**Nucleobases**
+
+<table>
+  <tr>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Guanine.png" height="90" alt="Guanine"><br><b>Guanine</b><br><sub>C<sub>5</sub>H<sub>5</sub>N<sub>5</sub>O</sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Cytosine.png" height="90" alt="Cytosine"><br><b>Cytosine</b><br><sub>C<sub>4</sub>H<sub>5</sub>N<sub>3</sub>O</sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Adenine.png" height="90" alt="Adenine"><br><b>Adenine</b><br><sub>C<sub>5</sub>H<sub>5</sub>N<sub>5</sub></sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Thymine.png" height="90" alt="Thymine"><br><b>Thymine</b><br><sub>C<sub>5</sub>H<sub>6</sub>N<sub>2</sub>O<sub>2</sub></sub></td>
+    <td align="center"><img src="geometries(%20xyz_files)/images/Uracil.png" height="90" alt="Uracil"><br><b>Uracil</b><br><sub>C<sub>4</sub>H<sub>4</sub>N<sub>2</sub>O<sub>2</sub></sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -70,7 +111,7 @@ vqe_cudaq/
 ├── notebooks/
 │   └── Molecular_Orbital_Visualization.ipynb
 ├── integrals/                # active-space integrals + CCSD amplitudes (.npz), see its README
-├── geometries( xyz_files)/
+├── geometries( xyz_files)/     # XYZ files; images/ holds the molecule pictures
 └── results/                  # CUDA-Q reference PKLs in cpu/ and gpu/ (see its README);
                               # other run outputs here are git-ignored
 ```
