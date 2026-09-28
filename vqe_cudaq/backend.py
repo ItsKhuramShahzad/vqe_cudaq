@@ -24,6 +24,9 @@ def configure_cudaq_target():
 
     - ``qpp-cpu``: default is double precision.
     - ``nvidia``: default is usually fp32 unless ``option="fp64"`` is given.
+
+    Raises if the active precision is not fp64, so a run can never silently use
+    fp32 (two earlier GPU runs did, because no precision was passed).
     """
     target = config.TARGET
     precision_option = config.TARGET_PRECISION
@@ -41,4 +44,6 @@ def configure_cudaq_target():
         precision = f"unknown ({e})"
 
     print("CUDA-Q precision:", precision, flush=True)
+    if "fp64" not in precision.lower():
+        raise RuntimeError(f"Expected fp64 simulation precision, got: {precision}")
     return precision

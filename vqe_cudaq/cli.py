@@ -4,13 +4,13 @@ Overrides the run :mod:`config` from CLI flags, then dispatches to the driver.
 
 Examples
 --------
-    python -m vqe_cudaq.cli --molecule Methylene --target nvidia --basis cc-pVDZ
+    python -m vqe_cudaq.cli --molecule Ethylene --target nvidia --basis cc-pVDZ
     python -m vqe_cudaq.cli --all --target qpp-cpu --optimizer COBYLA
     python -m vqe_cudaq.cli --export-xyz --xyz-dir xyz_files
     python -m vqe_cudaq.cli --export-xyz --molecule Adenine
     python -m vqe_cudaq.cli --generate-active-spaces --total-orbitals 40 --total-electrons 15
-    python -m vqe_cudaq.cli --analyze-active-spaces --molecule Methylene
-    python -m vqe_cudaq.cli --export-mos --molecule Methylene --basis cc-pVDZ
+    python -m vqe_cudaq.cli --analyze-active-spaces --molecule Ethylene
+    python -m vqe_cudaq.cli --export-mos --molecule Ethylene --basis cc-pVDZ
 """
 
 import os
@@ -38,13 +38,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--basis", default=config.BASIS)
     p.add_argument("--target", default=config.TARGET,
                    help='CUDA-Q target, e.g. "nvidia" or "qpp-cpu".')
-    p.add_argument("--precision", default="default",
+    p.add_argument("--precision", default="fp64",
                    choices=["default", "fp32", "fp64"],
-                   help="CUDA-Q precision for the nvidia target.")
+                   help="CUDA-Q precision for the nvidia target (default fp64; "
+                        "any run that is not fp64 stops).")
     p.add_argument("--optimizer", default=config.OPTIMIZER)
     p.add_argument("--out_dir", default="pkl_results")
     p.add_argument("--space_idx", type=int, default=None,
                    help="Run only the i-th active space of a single molecule.")
+    p.add_argument("--integrals", default=None,
+                   help="Read the Hamiltonian, E_HF, E_CASCI and CCSD amplitudes from "
+                        "this integrals folder instead of running PySCF; missing files "
+                        "are computed and saved there.")
+    p.add_argument("--max-memory", "--max_memory", type=int, default=config.MAX_MEMORY,
+                   help="PySCF memory limit in MB when a missing integral file is made.")
     p.add_argument("--export-xyz", "--export_xyz", action="store_true",
                    help="Export molecular geometries as XYZ files instead of running VQE.")
     p.add_argument("--xyz-dir", "--xyz_dir", default="xyz_files",
@@ -219,6 +226,7 @@ def _apply_config(args):
     config.TARGET = args.target
     config.OPTIMIZER = args.optimizer
     config.TARGET_PRECISION = None if args.precision == "default" else args.precision
+    config.MAX_MEMORY = args.max_memory
 
 
 def _run_orbital_export(args):
@@ -330,7 +338,7 @@ def main(argv=None):
     from .driver import run_one_molecule, run_all_molecules
 
     if args.all:
-        run_all_molecules(molecules, out_dir=out_dir)
+        run_all_molecules(molecules, out_dir=out_dir, integrals_dir=args.integrals)
         return
 
     if args.molecule is None:
@@ -350,11 +358,12 @@ def main(argv=None):
 
     print(
         f"[RUN] {molecule_name} | BASIS={config.BASIS} | TARGET={config.TARGET} "
-        f"| PRECISION={config.TARGET_PRECISION or 'default'} | OPT={config.OPTIMIZER}",
+        f"| PRECISION={config.TARGET_PRECISION or 'default'} | OPT={config.OPTIMIZER}"
+        f"{' | INTEGRALS=' + args.integrals if args.integrals else ''}",
         flush=True,
     )
 
-    mol_res = run_one_molecule(molecule_name, spec)
+    mol_res = run_one_molecule(molecule_name, spec, integrals_dir=args.integrals)
 
     tag       = time.strftime("%d_%b_%Y").upper()
     mol_clean = sanitize_name(molecule_name)

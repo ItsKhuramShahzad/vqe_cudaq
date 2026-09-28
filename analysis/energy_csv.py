@@ -38,10 +38,12 @@ ALLOWED_SPACES = {
 }
 
 # canonical molecule order (matches the latex generator)
+OLD_NAMES = {"Benzaanthracene": "Tetracene"}
+
 MOL_ORDER = [
-    "Methylene", "Ethylene",
-    "Benzene", "Naphthalene", "Tetracene", "Benzaanthracene", "Pentacene",
-    "Methanamide",""
+    "Methylene", "Ethylene",   # Methylene kept so every marker/colour keeps its position
+    "Benzene", "Naphthalene", "Tetracene", "Pentacene",   # Tetracene in the old Benzaanthracene slot
+    "NH2-", "Methanamide",
     "Adenine", "Thymine", "Uracil", "Cytosine", "Guanine",
 ]
 
@@ -83,7 +85,8 @@ def load_dir(dirpath):
     out = {}
     for fp in sorted(glob.glob(os.path.join(dirpath, "*.pkl"))):
         mol_key, refs, runs = parse_pkl(fp)
-        out[mol_key] = {"refs": refs, "runs": runs}
+        # older result files use the former key of Tetracene
+        out[OLD_NAMES.get(mol_key, mol_key)] = {"refs": refs, "runs": runs}
     return out
 
 

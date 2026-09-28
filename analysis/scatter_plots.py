@@ -43,8 +43,8 @@ RECC = "CASCI Recovery (E_VQE_GPU-E_HF)/(E_CASCI-E_HF)"
 
 # ── molecule order / display / style ───────────────────────────────
 MOL_ORDER = [
-    "Methylene", "Ethylene",
-    "Benzene", "Naphthalene", "Tetracene", "Benzaanthracene", "Pentacene",
+    "Methylene", "Ethylene",   # Methylene kept so every marker/colour keeps its position
+    "Benzene", "Naphthalene", "Tetracene", "Pentacene",   # Tetracene in the old Benzaanthracene slot
     "NH2-", "Methanamide",
     "Adenine", "Thymine", "Uracil", "Cytosine", "Guanine",
 ]
@@ -196,6 +196,8 @@ SPECS = [
 
 def load():
     df = pd.read_csv(CSV)
+    # older CSVs use the former key of Tetracene
+    df["Molecule"] = df["Molecule"].replace({"Benzaanthracene": "Tetracene"})
     for c in [ORB, ELE, GHF, CHF, GAP, CORR, SPD, REC, RECC]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     # derive (Ne, No) and qubit count from the "(Ne,No)" string

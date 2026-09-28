@@ -67,16 +67,12 @@ vqe_cudaq/
 │   └── latex_report.py       # full PGFPlots/LaTeX figure + report generator
 ├── scripts/
 │   └── dump_integrals.py
-├── final_run/                # script and data of the final CPU/GPU benchmark runs
-│   ├── 2026_SEP_Optimized_VQE.py
-│   ├── molecules_data.py     # 12 molecules, 9 active spaces each
-│   ├── integrals.py          # active-space integrals + CCSD amplitudes: make, save, load
-│   └── dump_active_integrals.py
 ├── notebooks/
 │   └── Molecular_Orbital_Visualization.ipynb
 ├── integrals/                # active-space integrals + CCSD amplitudes (.npz), see its README
 ├── geometries( xyz_files)/
-└── results/                  # PKL outputs (git-ignored)
+└── results/                  # CUDA-Q reference PKLs in cpu/ and gpu/ (see its README);
+                              # other run outputs here are git-ignored
 ```
 
 ---
@@ -107,7 +103,7 @@ from vqe_cudaq.molecules import molecules
 from vqe_cudaq.visualization import visualize_all, visualize_one
 
 visualize_one("Adenine", molecules)
-visualize_all(molecules, names=["Methylene", "Benzene", "Adenine"])
+visualize_all(molecules, names=["Ethylene", "Benzene", "Adenine"])
 ```
 
 Each molecule records its source coordinate unit explicitly. Bonds in these
@@ -149,9 +145,9 @@ python -m vqe_cudaq.cli --generate-active-spaces \
 Generate from one molecule's stored metadata, or analyze its curated spaces:
 
 ```bash
-python -m vqe_cudaq.cli --generate-active-spaces --molecule Methylene
-python -m vqe_cudaq.cli --analyze-active-spaces --molecule Methylene
-python -m vqe_cudaq.cli --analyze-active-spaces --molecule Methylene --space_idx 0
+python -m vqe_cudaq.cli --generate-active-spaces --molecule Ethylene
+python -m vqe_cudaq.cli --analyze-active-spaces --molecule Ethylene
+python -m vqe_cudaq.cli --analyze-active-spaces --molecule Ethylene --space_idx 0
 ```
 
 From Python:
@@ -188,7 +184,7 @@ energy/occupation table, an energy-level diagram, and cube files around the
 HOMO/LUMO frontier:
 
 ```bash
-python -m vqe_cudaq.cli --export-mos --molecule Methylene \
+python -m vqe_cudaq.cli --export-mos --molecule Ethylene \
     --basis cc-pVDZ --mo-window 3 --mo-grid 80
 ```
 
@@ -217,7 +213,7 @@ from vqe_cudaq import (
 from vqe_cudaq.molecules import molecules
 
 calc = run_orbital_calculation(
-    "Methylene", molecules["Methylene"], basis="cc-pVDZ"
+    "Ethylene", molecules["Ethylene"], basis="cc-pVDZ"
 )
 display(orbital_table(calc))
 
@@ -237,7 +233,7 @@ are ignored by Git because cube files can be very large.
 
 ```bash
 # Single molecule, GPU
-python -m vqe_cudaq.cli --molecule Methylene --target nvidia --basis cc-pVDZ
+python -m vqe_cudaq.cli --molecule Ethylene --target nvidia --basis cc-pVDZ
 
 # Single molecule, CPU, one active space only
 python -m vqe_cudaq.cli --molecule Benzene --target qpp-cpu --space_idx 0
@@ -252,7 +248,7 @@ Or from Python:
 from vqe_cudaq import run_one_molecule
 from vqe_cudaq.molecules import molecules
 
-result = run_one_molecule("Methylene", molecules["Methylene"])
+result = run_one_molecule("Ethylene", molecules["Ethylene"])
 ```
 
 Default run settings live in `vqe_cudaq/config.py` and can be overridden on the
@@ -260,18 +256,23 @@ CLI (`--basis`, `--target`, `--precision`, `--optimizer`, `--out_dir`).
 
 ### Final benchmark run
 
-The CPU/GPU runs for the benchmark use `final_run/2026_SEP_Optimized_VQE.py`, with one
-software environment and one set of settings on both backends (fp64 enforced, CCSD
-starting point checked, run metadata recorded). It can start from the geometry or from
-the saved integral files in `integrals/`, which gives the same Hamiltonians without the
-full-molecule integral transformation:
+The CPU/GPU benchmark runs use one software environment and one set of settings on
+both backends: fp64 is enforced (a run that is not fp64 stops), the closed-shell CCSD
+starting point is checked, and every PKL records the run metadata (package versions,
+host, SLURM job, GPU, and a hash of the `vqe_cudaq` code). A run can start from the
+geometry or from the saved integral files in `integrals/`, which give the same
+Hamiltonians without the full-molecule integral transformation:
 
 ```bash
-cd final_run
-python 2026_SEP_Optimized_VQE.py --molecule Benzene --target qpp-cpu --integrals ../integrals
+python -m vqe_cudaq.cli --molecule Benzene --target qpp-cpu --integrals integrals
+python -m vqe_cudaq.cli --molecule Benzene --target nvidia --precision fp64 --integrals integrals
 ```
 
-See [`final_run/README.md`](final_run/README.md) and [`integrals/README.md`](integrals/README.md).
+Missing integral files are computed and saved on the fly. Each active space also stores
+the circuit energy at theta = 0 (`E_ref_total`, equal to E_HF) and at the CCSD starting
+point (`E_theta0_total`), before any optimisation.
+
+See [`integrals/README.md`](integrals/README.md) for the file format.
 
 ---
 

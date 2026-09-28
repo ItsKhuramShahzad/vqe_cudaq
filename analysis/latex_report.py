@@ -51,14 +51,17 @@ JITTER = 0.06   # horizontal jitter per Ne level at the same No
 # ──────────────────────────────────────────────────────────────────
 MOL_ORDER = [
     # small
-    "Methylene", "Ethylene",
+    "Methylene", "Ethylene",   # Methylene kept so every marker/colour keeps its position
     # PAH / acenes
-    "Benzene", "Naphthalene", "Tetracene", "Benzaanthracene", "Pentacene",
+    "Benzene", "Naphthalene", "Tetracene", "Pentacene",   # Tetracene in the old Benzaanthracene slot
     # functional groups
     "NH2-", "Methanamide",
     # nucleobases
     "Adenine", "Thymine", "Uracil", "Cytosine", "Guanine",
 ]
+
+# Older result files use the former key of Tetracene; they are read as Tetracene.
+OLD_NAMES = {"Benzaanthracene": "Tetracene"}
 
 def sort_molecules(molecules):
     """Return molecules sorted by MOL_ORDER; unknowns appended alphabetically."""
@@ -69,8 +72,8 @@ def sort_molecules(molecules):
 
 # ──────────────────────────────────────────────────────────────────
 #  CANONICAL ACTIVE-SPACE CONFIGURATIONS
-#  These 9 (nele_cas, norb_cas) pairs are shared across all 13 molecules.
-#  Non-standard configs (e.g. (2,2) or (4,6) for Methylene/Pentacene)
+#  These 9 (nele_cas, norb_cas) pairs are shared across all 12 molecules.
+#  Non-standard configs (e.g. (8,5) or (4,6) for Ethylene/Pentacene)
 #  are excluded from plots so the color map is consistent everywhere.
 # ──────────────────────────────────────────────────────────────────
 CANONICAL_AS = sorted([
@@ -83,7 +86,6 @@ CANONICAL_AS = sorted([
 #  PKL DISPLAY NAMES
 # ──────────────────────────────────────────────────────────────────
 DISPLAY = {
-    "Methylene"       : "Methylene",
     "Ethylene"        : "Ethylene",
     "Benzene"         : "Benzene",
     "Naphthalene"     : "Naphthalene",
@@ -267,6 +269,7 @@ def load_directory(dirpath):
         try:
             mol_key, runs, refs = parse_pkl(fp)
             name = mol_name_from_path(fp)
+            name = OLD_NAMES.get(name, name)   # older result files say Benzaanthracene
             out[name] = {"runs": runs, "refs": refs, "mol_key": mol_key}
             print(f"  ✓  {name:26s}  {len(runs):2d} runs")
         except Exception as exc:
@@ -723,7 +726,7 @@ def fig1_energy_vs_norb(cpu, gpu, molecules, outdir):
 
     blocks.append(
         r"% === Legend ===" + "\n"
-        r"\nextgroupplot[hide axis]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10]" + "\n"
         r"\addlegendimage{mark=*, blue, thick, mark size=2.2pt}" + "\n"
         r"\addlegendentry{VQE (CPU)}" + "\n"
         r"\addlegendimage{mark=triangle, red, dashed, thick,"
@@ -800,7 +803,7 @@ def fig2_energy_per_config(cpu, gpu, molecules, outdir):
             + mol_label_node(mol, display(mol), anchor='north east', pos='0.98,0.98') + "\n"
         )
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, bar shift=-2pt, fill=blue!60}" + "\n"
         r"\addlegendentry{VQE (CPU)}" + "\n"
         r"\addlegendimage{ybar, bar shift=+2pt, fill=red!60}" + "\n"
@@ -816,7 +819,7 @@ def fig2_energy_per_config(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.4cm,vertical sep=1cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=3pt, y dir=reverse," + "\n"
+        + r"  ybar, /pgf/bar width=3pt, y dir=reverse," + "\n"
         + r"  xtick=data, x tick label style={rotate=45, anchor=east}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -867,7 +870,7 @@ def fig3_runtime_per_config(cpu, gpu, molecules, outdir):
             + mol_label_node(mol, display(mol), anchor='north west', pos='0.02,0.98') + "\n"
         )
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, bar shift=-2pt, fill=blue!60}" + "\n"
         r"\addlegendentry{CPU runtime}" + "\n"
         r"\addlegendimage{ybar, bar shift=+2pt, fill=red!60}" + "\n"
@@ -883,7 +886,7 @@ def fig3_runtime_per_config(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.4cm,vertical sep=1cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=3pt, xtick=data," + "\n"
+        + r"  ybar, /pgf/bar width=3pt, xtick=data," + "\n"
         + r"  x tick label style={rotate=45, anchor=east}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -933,7 +936,7 @@ def fig4_speedup_per_config(cpu, gpu, molecules, outdir):
             + mol_label_node(mol, display(mol), anchor='north west', pos='0.02,0.98') + "\n"
         )
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, fill=green!65!black}" + "\n"
         r"\addlegendentry{Speedup $t_{\mathrm{CPU}}/t_{\mathrm{GPU}}$}" + "\n"
     )
@@ -947,7 +950,7 @@ def fig4_speedup_per_config(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.3cm,vertical sep=1.0cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=3pt, xtick=data," + "\n"
+        + r"  ybar, /pgf/bar width=3pt, xtick=data," + "\n"
         + r"  x tick label style={rotate=45, anchor=east}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -997,7 +1000,7 @@ def fig5_runtime_vs_qubits(cpu, gpu, molecules, outdir):
             + mol_label_node(mol, display(mol), anchor='north west', pos='0.02,0.98') + "\n"
         )
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, bar shift=-2pt, fill=blue!60}" + "\n"
         r"\addlegendentry{Runtime (CPU)}" + "\n"
         r"\addlegendimage{ybar, bar shift=+2pt, fill=red!60}" + "\n"
@@ -1013,7 +1016,7 @@ def fig5_runtime_vs_qubits(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.5cm,vertical sep=1.0cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=3pt, ymode=log, ymin=1," + "\n"
+        + r"  ybar, /pgf/bar width=3pt, ymode=log, ymin=1," + "\n"
         + r"  xtick=data, x tick label style={font=\scriptsize}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -1122,8 +1125,11 @@ def fig7_runtime_vs_norb(cpu, gpu, molecules, outdir):
             f"\\addplot+[mark=triangle*, red, dashed, thick] coordinates {{{g_str}}};\n"
             + mol_label_node(mol, display(mol), anchor='north west', pos='0.02,0.98') + "\n"
         )
-    blocks.append(r"\nextgroupplot[hide axis]" + "\n"
-                  r"\legend{CPU runtime, GPU runtime}" + "\n")
+    blocks.append(r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10]" + "\n"
+                  r"\addlegendimage{mark=*, blue, thick}" + "\n"
+                  r"\addlegendentry{CPU runtime}" + "\n"
+                  r"\addlegendimage{mark=triangle*, red, dashed, thick}" + "\n"
+                  r"\addlegendentry{GPU runtime}" + "\n")
 
     body = (
         HEADER
@@ -1368,10 +1374,10 @@ def fig10_energy_comparison(cpu, gpu, molecules, outdir):
             f"{ylabel_10}]\n"
             + hf_line
             + ccsd_line
-            + (f"\\addplot+[ybar, bar shift=-2.5pt, bar width=3.5pt,"
+            + (f"\\addplot+[ybar, bar shift=-2.5pt, /pgf/bar width=3.5pt,"
                f" fill=blue!60, draw=blue!80] coordinates {{{' '.join(vc_pts)}}};\n"
                if vc_pts else "")
-            + (f"\\addplot+[ybar, bar shift=+2.5pt, bar width=3.5pt,"
+            + (f"\\addplot+[ybar, bar shift=+2.5pt, /pgf/bar width=3.5pt,"
                f" fill=red!55, draw=red!80]  coordinates {{{' '.join(vg_pts)}}};\n"
                if vg_pts else "")
             + mol_label_node(mol, display(mol), bold=True, anchor='center', pos='0.5,0.5')
@@ -1383,7 +1389,7 @@ def fig10_energy_comparison(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis,"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10,"
         r" legend style={at={(0.5,0.5)}, anchor=center,"
         r" legend columns=1, font=\small, row sep=4pt}]" + "\n"
         r"\addlegendimage{ybar, fill=blue!60, draw=blue!80}" + "\n"
@@ -1513,10 +1519,10 @@ def fig16_vqe_vs_hf_only(cpu, gpu, molecules, outdir):
             f"  y tick label style={{/pgf/number format/fixed, font=\\tiny}},\n"
             f"{ylabel_16}]\n"
             + hf_line
-            + (f"\\addplot+[ybar, bar shift=-2.5pt, bar width=3.5pt,"
+            + (f"\\addplot+[ybar, bar shift=-2.5pt, /pgf/bar width=3.5pt,"
                f" fill=blue!60, draw=blue!80] coordinates {{{' '.join(vc_pts)}}};\n"
                if vc_pts else "")
-            + (f"\\addplot+[ybar, bar shift=+2.5pt, bar width=3.5pt,"
+            + (f"\\addplot+[ybar, bar shift=+2.5pt, /pgf/bar width=3.5pt,"
                f" fill=red!55, draw=red!80]  coordinates {{{' '.join(vg_pts)}}};\n"
                if vg_pts else "")
             + mol_label_node(mol, display(mol), bold=True, anchor='south west', pos='0.02,0.02')
@@ -1528,7 +1534,7 @@ def fig16_vqe_vs_hf_only(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis,"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10,"
         r" legend style={at={(0.5,0.5)}, anchor=center,"
         r" legend columns=1, font=\small, row sep=4pt}]" + "\n"
         r"\addlegendimage{ybar, fill=blue!60, draw=blue!80}" + "\n"
@@ -1692,7 +1698,7 @@ def fig11_energy_error_vs_ccsd(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, bar shift=-2pt, fill=blue!60, draw=blue!80}" + "\n"
         r"\addlegendentry{$|E_{\mathrm{VQE}}^{\mathrm{CPU}} - E_{\mathrm{CCSD}}|$ [Ha]}" + "\n"
         r"\addlegendimage{ybar, bar shift=+2pt, fill=red!55,  draw=red!80}" + "\n"
@@ -1708,7 +1714,7 @@ def fig11_energy_error_vs_ccsd(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.4cm,vertical sep=1cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=4pt, xtick=data," + "\n"
+        + r"  ybar, /pgf/bar width=4pt, xtick=data," + "\n"
         + r"  x tick label style={rotate=45, anchor=east}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -1811,7 +1817,7 @@ def fig12_correlation_recovery(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, bar shift=-2pt, fill=blue!60, draw=blue!80}" + "\n"
         r"\addlegendentry{$\eta_{\mathrm{CPU}}$ [\%]}" + "\n"
         r"\addlegendimage{ybar, bar shift=+2pt, fill=red!55,  draw=red!80}" + "\n"
@@ -1829,7 +1835,7 @@ def fig12_correlation_recovery(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.4cm,vertical sep=1cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=3pt, xtick=data," + "\n"
+        + r"  ybar, /pgf/bar width=3pt, xtick=data," + "\n"
         + r"  x tick label style={rotate=45, anchor=east}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -1928,7 +1934,7 @@ def fig13_energy_landscape(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10]" + "\n"
         r"\addlegendimage{mark=none, gray, dashed, thick, line width=1.2pt}" + "\n"
         r"\addlegendentry{$E_{\mathrm{HF}}$}" + "\n"
         r"\addlegendimage{mark=none, green!60!black, dotted, thick, line width=1.5pt}" + "\n"
@@ -2053,7 +2059,7 @@ def fig14_vqe_ccsd_delta(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, bar shift=-2pt, fill=blue!60, draw=blue!80}" + "\n"
         r"\addlegendentry{$\Delta E_{\mathrm{CPU}}$ [mHa]}" + "\n"
         r"\addlegendimage{ybar, bar shift=+2pt, fill=red!55,  draw=red!80}" + "\n"
@@ -2071,7 +2077,7 @@ def fig14_vqe_ccsd_delta(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.4cm,vertical sep=1cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=4pt, xtick=data," + "\n"
+        + r"  ybar, /pgf/bar width=4pt, xtick=data," + "\n"
         + r"  x tick label style={rotate=45, anchor=east}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -2394,7 +2400,7 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
     # ordering by active-space size is read directly from hue -- no legend
     # needed. Colors are fixed across all molecules and panels via the
     # canonical list of 9 (Ne, No) pairs; non-standard configs (e.g. (2,2)
-    # or (4,6) for Methylene/Pentacene) are silently skipped.
+    # or (4,6) for Ethylene/Pentacene) are silently skipped.
     all_as_configs = CANONICAL_AS
     n_as = max(len(all_as_configs), 1)
 
@@ -2487,30 +2493,14 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         r"\end{subfigure}\hfill" + "\n"
     )
 
-    # ── Panel (b): |ΔE(GPU-CPU)| DISTRIBUTION (Methylene excluded) ──
-    # Methylene's GPU-CPU spread is far larger than any other molecule and
-    # would compress everything else onto the axis floor, so it is dropped
-    # from this panel; its range is reported in the caption instead.
-    meth_lbl = display("Methylene")
-    keep_b   = [i for i, m in enumerate(mol_labels) if m != meth_lbl]
-    mol_labels_b = [mol_labels[i]     for i in keep_b]
-    dE_as_b      = [dE_as[i]          for i in keep_b]
-    dE_all_b     = [dE_gpu_cpu_all[i] for i in keep_b]
-    dE_med_b     = [dE_med[i]         for i in keep_b]
-    dE_min_b     = [dE_min[i]         for i in keep_b]
-    dE_max_b     = [dE_max[i]         for i in keep_b]
+    # ── Panel (b): |ΔE(GPU-CPU)| DISTRIBUTION ──
+    mol_labels_b = mol_labels
+    dE_as_b      = dE_as
+    dE_all_b     = dE_gpu_cpu_all
+    dE_med_b     = dE_med
+    dE_min_b     = dE_min
+    dE_max_b     = dE_max
     sym_list_b   = ",".join(f"{{{m}}}" for m in mol_labels_b)
-
-    if meth_lbl in mol_labels:
-        _mi = mol_labels.index(meth_lbl)
-        meth_note = (
-            f" Methylene is omitted here for scale: its "
-            f"$|\\Delta E_{{\\mathrm{{GPU-CPU}}}}|$ ranges "
-            f"{dE_min[_mi]:.2f}--{dE_max[_mi]:.2f}\\,mHa "
-            f"(median {dE_med[_mi]:.2f}\\,mHa)."
-        )
-    else:
-        meth_note = ""
 
     ymax_b = max(max(dE_max_b) * 1.25, 2.0) if dE_max_b else 2.0
     ymin_b = -0.08
@@ -2553,7 +2543,7 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         r"paired active-space configs per molecule. All remaining configurations" + "\n"
         r"lie below the red dashed chemical-accuracy threshold (1.6\,mHa)," + "\n"
         r"confirming GPU introduces no chemically meaningful numerical error."
-        + meth_note + "}" + "\n"
+        + "}" + "\n"
         r"\end{subfigure}" + "\n"
     )
 
@@ -2562,7 +2552,7 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         r"\begin{subfigure}[t]{0.48\textwidth}" + "\n"
         r"\centering\begin{tikzpicture}" + "\n"
         r"\begin{axis}[" + "\n"
-        r"  ybar, bar width=5pt," + "\n"
+        r"  ybar, /pgf/bar width=5pt," + "\n"
         r"  enlarge x limits=0.06," + "\n"
         r"  width=\textwidth, height=0.70\textwidth," + "\n"
         r"  ylabel={$|E_{\mathrm{VQE}} - E_{\mathrm{HF}}|$ [mHa]}," + "\n"
@@ -2677,8 +2667,7 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         + r" fraction of the total VQE energy."
         + r" In panels~(a), (b) and~(d) each dot is one active-space"
         + r" configuration, coloured on a red$\to$violet scale by active-space"
-        + r" size (smallest $(2,3)$ red $\to$ largest $(6,7)$ violet); panel~(b)"
-        + r"  Methylene is omitted here for scale: its $|\Delta E_{\mathrm{GPU-CPU}}|$ ranges 13.86--15.24\,mHa (median 14.44\,mHa).."
+        + r" size (smallest $(2,3)$ red $\to$ largest $(6,7)$ violet)."
         + r" See Fig.~\ref{fig:accuracy_summary} for CCSD-accuracy comparison"
         + r" and multi-metric normalised view.}" + "\n"
         + r"\label{fig:performance_summary}" + "\n"
@@ -2730,8 +2719,7 @@ def fig15_performance_summary(cpu, gpu, molecules, outdir):
         + r" dashed red line marks chemical accuracy (1.6\,mHa)."
         + r" Each dot is one active-space configuration, coloured on a"
         + r" red$\to$violet scale by active-space size (smallest $(2,3)$ red"
-        + r" $\to$ largest $(6,7)$ violet); panel~(b) excludes Methylene for scale"
-        + r" (see its sub-caption).}"
+        + r" $\to$ largest $(6,7)$ violet).}"
     )
     cap_cd = (
         r"\caption{GPU-acceleration performance (part~2)."
@@ -2860,7 +2848,7 @@ def fig22_accuracy_summary(cpu, gpu, molecules, outdir):
         r"\begin{subfigure}[t]{0.48\textwidth}" + "\n"
         r"\centering\begin{tikzpicture}" + "\n"
         r"\begin{axis}[" + "\n"
-        r"  ybar, bar width=5pt," + "\n"
+        r"  ybar, /pgf/bar width=5pt," + "\n"
         r"  enlarge x limits=0.06," + "\n"
         r"  width=\textwidth, height=0.70\textwidth," + "\n"
         r"  ylabel={$|E_{\mathrm{VQE}} - E_{\mathrm{CCSD}}|$ [mHa]}," + "\n"
@@ -2888,7 +2876,7 @@ def fig22_accuracy_summary(cpu, gpu, molecules, outdir):
         r"\begin{subfigure}[t]{0.48\textwidth}" + "\n"
         r"\centering\begin{tikzpicture}" + "\n"
         r"\begin{axis}[" + "\n"
-        r"  ybar, bar width=4pt," + "\n"
+        r"  ybar, /pgf/bar width=4pt," + "\n"
         r"  enlarge x limits=0.06," + "\n"
         r"  width=\textwidth, height=0.70\textwidth," + "\n"
         r"  ylabel={Normalised value $[0,1]$}," + "\n"
@@ -3161,7 +3149,7 @@ def fig24_vqe_casci_accuracy(cpu, gpu, molecules, outdir):
         + r"\centering\resizebox{\textwidth}{!}{%" + "\n"
         + r"\begin{tikzpicture}" + "\n"
         + r"\begin{axis}[" + "\n"
-        + r"  ybar, bar width=6pt," + "\n"
+        + r"  ybar, /pgf/bar width=6pt," + "\n"
         + r"  width=\textwidth, height=0.42\textwidth," + "\n"
         + r"  enlarge x limits=0.05," + "\n"
         + f"  symbolic x coords={{{sym_list}}}," + "\n"
@@ -3320,7 +3308,7 @@ def fig25_vqe_ccsd_accuracy(cpu, gpu, molecules, outdir):
         + r"\centering\resizebox{\textwidth}{!}{%" + "\n"
         + r"\begin{tikzpicture}" + "\n"
         + r"\begin{axis}[" + "\n"
-        + r"  ybar, bar width=6pt," + "\n"
+        + r"  ybar, /pgf/bar width=6pt," + "\n"
         + r"  width=\textwidth, height=0.42\textwidth," + "\n"
         + r"  enlarge x limits=0.05," + "\n"
         + f"  symbolic x coords={{{sym_list}}}," + "\n"
@@ -3449,7 +3437,7 @@ def fig17_convergence_curves(cpu, gpu, molecules, outdir):
             f"  ymin={ymin_v:.6f}, ymax={ymax_v:.6f},\n"
             f"  scaled y ticks=false,\n"
             f"  {ylabel_17}\n"
-            f"  y tick label style={{/pgf/number format/fixed precision=3, font=\\tiny}},\n"
+            f"  y tick label style={{/pgf/number format/fixed, /pgf/number format/precision=3, font=\\tiny}},\n"
             f"]\n"
             + ccsd_line
             + f"\\addplot[blue, thick, mark=none] coordinates {{{c_coords}}};\n"
@@ -3464,7 +3452,7 @@ def fig17_convergence_curves(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)},anchor=center,"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)},anchor=center,"
         r"legend columns=1,font=\small,row sep=3pt}]" + "\n"
         r"\addlegendimage{blue, thick, mark=none}" + "\n"
         r"\addlegendentry{VQE (CPU)}" + "\n"
@@ -3572,7 +3560,7 @@ def fig18_runtime_breakdown(cpu, gpu, molecules, outdir):
             f"\\addplot+[ybar stacked, fill=gray!45,    draw=gray!60]"
             f" coordinates {{{' '.join(ov_pts)}}};\n"
             + (f"\\addplot+[red, thick, mark=square*, mark size=1.5pt,"
-               f" mark options={{fill=red}}, ybar=0pt, bar width=0pt]"
+               f" mark options={{fill=red}}, ybar=0pt, /pgf/bar width=0pt]"
                f" coordinates {{{' '.join(gpu_pts)}}};\n"
                if gpu_pts else "")
             + mol_label_node(mol, display(mol), bold=True, anchor='south west', pos='0.02,0.02')
@@ -3584,7 +3572,7 @@ def fig18_runtime_breakdown(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)},anchor=center,"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)},anchor=center,"
         r"legend columns=1,font=\small,row sep=3pt}]" + "\n"
         r"\addlegendimage{ybar stacked, fill=blue!60,   draw=blue!80}"   + "\n"
         r"\addlegendentry{Quantum simulation [s]}" + "\n"
@@ -3852,7 +3840,7 @@ def fig19_ccsd_diagnostics(cpu, gpu, molecules, outdir):
         + r"\resizebox{\textwidth}{!}{%" + "\n"
         + r"\begin{tikzpicture}" + "\n"
         + r"\begin{axis}[" + "\n"
-        + r"  ybar, bar width=8pt," + "\n"
+        + r"  ybar, /pgf/bar width=8pt," + "\n"
         + r"  width=\textwidth, height=0.45\textwidth," + "\n"
         + r"  enlarge x limits=0.05," + "\n"
         + f"  symbolic x coords={{{sym_list}}}," + "\n"
@@ -3910,7 +3898,7 @@ def fig20_circuit_complexity(cpu, gpu, molecules, outdir):
     # figure families use identical molecule symbols.
     # NB: use OPEN oplus/otimes (not oplus*/otimes*) -- the filled '*'
     # variants hide the inner +/x glyph and render as plain filled circles,
-    # colliding with '*' (Methylene). Open versions keep +/x visible.
+    # colliding with '*' (the first molecule). Open versions keep +/x visible.
     TIKZ_MARKS = ["*", "square*", "triangle*", "diamond*", "pentagon*", "o",
                   "square", "triangle", "diamond", "pentagon", "oplus",
                   "otimes", "star"]
@@ -4136,7 +4124,7 @@ def fig21_correlation_recovery_log(cpu, gpu, molecules, outdir):
         return
 
     blocks.append(
-        r"\nextgroupplot[hide axis, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
+        r"\nextgroupplot[hide axis, xmin=1, xmax=10, ymin=1, ymax=10, legend style={at={(0.5,0.5)}, anchor=center}]" + "\n"
         r"\addlegendimage{ybar, bar shift=-2pt, fill=blue!60, draw=blue!80}" + "\n"
         r"\addlegendentry{$\eta_{\mathrm{CPU}}$ [\%]}" + "\n"
         r"\addlegendimage{ybar, bar shift=+2pt, fill=red!55,  draw=red!80}" + "\n"
@@ -4154,7 +4142,7 @@ def fig21_correlation_recovery_log(cpu, gpu, molecules, outdir):
         + f"  group style={{group size={NCOLS} by {nrows},"
         + r"horizontal sep=1.4cm,vertical sep=1cm}," + "\n"
         + r"  width=0.27\textwidth, height=0.34\textwidth," + "\n"
-        + r"  ybar, bar width=3pt, xtick=data," + "\n"
+        + r"  ybar, /pgf/bar width=3pt, xtick=data," + "\n"
         + r"  x tick label style={rotate=45, anchor=east}," + "\n"
         + r"  tick label style={font=\scriptsize}, label style={font=\scriptsize}," + "\n"
         + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -4174,7 +4162,7 @@ def fig21_correlation_recovery_log(cpu, gpu, molecules, outdir):
         + r" Fig.~\ref{fig:correlation_recovery} but plotted logarithmically"
         + r" so the full dynamic range of recovery fractions is visible."
         + r" Recovery correlates inversely with molecule size: smaller"
-        + r" systems (Methylene, Ethylene) recover $\sim$10--20\,\% of"
+        + r" systems (e.g. Ethylene) recover $\sim$10--20\,\% of"
         + r" their correlation budget within the 14-qubit active space,"
         + r" while larger systems (acenes, nucleobases) recover"
         + r" $\sim$1--3\,\%. This reflects the intrinsic limitation of"
@@ -4248,7 +4236,7 @@ def figA_vqe_casci_gap(cpu, gpu, molecules, outdir):
             + r"  ylabel={$|E_{\mathrm{VQE}} - E_{\mathrm{CASCI}}|$ [mHa]}," + "\n"
             + r"  xlabel={Active-space config $(N_e^{(a)}, N_o^{(a)})$}," + "\n"
             + f"  ymin=0, ymax={ymax:.4f}," + "\n"
-            + r"  ybar, bar width=12pt," + "\n"
+            + r"  ybar, /pgf/bar width=12pt," + "\n"
             + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
             + r"  tick label style={font=\small}," + "\n"
             + r"  label style={font=\small}," + "\n"
@@ -4717,7 +4705,7 @@ def figF_cycle_improvement(cpu, molecules, outdir):
             + f"  group style={{group size={ncols} by {nrows},"
             + r"horizontal sep=1.6cm,vertical sep=1.2cm}," + "\n"
             + r"  width=0.45\textwidth, height=0.40\textwidth," + "\n"
-            + r"  ybar, bar width=12pt," + "\n"
+            + r"  ybar, /pgf/bar width=12pt," + "\n"
             + r"  ylabel={$\Delta E$ per cycle [mHa]}," + "\n"
             + r"  xlabel={COBYLA restart cycle}," + "\n"
             + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
@@ -4867,7 +4855,7 @@ def figH_optimizer_efficiency(cpu, molecules, outdir):
             + r"  ylabel={Improving evaluations [\%]}," + "\n"
             + r"  xlabel={Active-space config $(N_e^{(a)}, N_o^{(a)})$}," + "\n"
             + r"  ymin=0, ymax=12," + "\n"
-            + r"  ybar, bar width=12pt," + "\n"
+            + r"  ybar, /pgf/bar width=12pt," + "\n"
             + r"  ymajorgrids=true, grid style={dotted,gray!30}," + "\n"
             + r"  tick label style={font=\small}, label style={font=\small}," + "\n"
             + r"  width=0.85\textwidth, height=0.45\textwidth," + "\n"

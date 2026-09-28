@@ -8,19 +8,20 @@ transformation, which is too large for the biggest molecules.
 ## Layout
 
 ```
-integrals/<basis>/<molecule>/space_<NN>_ncore_<C>_nele_<E>_norb_<O>.npz
+integrals/<basis>/<molecule>/No#_<NN>_No(c)_<C>_Ne(a)_<E>_No(a)_<O>.npz
 ```
 
-For example `integrals/cc-pVDZ/Ethylene/space_05_ncore_6_nele_4_norb_3.npz`:
+For example `integrals/cc-pVDZ/Ethylene/No#_05_No(c)_6_Ne(a)_4_No(a)_3.npz`:
 Ethylene, cc-pVDZ, 6 frozen core orbitals, 4 electrons in 3 active orbitals (6 qubits).
 
-`NN` is only the position of the space in the list in `final_run/molecules_data.py`.
-Identify a space by `ncore`, `nele` and `norb`, not by `NN`.
+`NN` is only the position of the space in the list in `vqe_cudaq/molecules.py`.
+Identify a space by `No(c)` (ncore), `Ne(a)` (active electrons) and `No(a)`
+(active orbitals), not by `NN`.
 
 - **Basis sets:** `sto-3g`, `6-31g`, `cc-pVDZ`
 - **Molecules:** NH2-, Ethylene, Methanamide, Benzene, Naphthalene, Tetracene,
   Pentacene, Uracil, Cytosine, Thymine, Adenine, Guanine
-- **Geometries:** from `final_run/molecules_data.py` (NIST CCCBDB or PubChem)
+- **Geometries:** from `vqe_cudaq/molecules.py` (NIST CCCBDB or PubChem)
 - **Active spaces:** 9 per molecule, 6 to 14 qubits
 
 Some active spaces do not exist in sto-3g because the basis has too few orbitals
@@ -84,7 +85,7 @@ with the sums over spin included.
 ```python
 import numpy as np
 
-d = np.load("integrals/cc-pVDZ/Ethylene/space_05_ncore_6_nele_4_norb_3.npz")
+d = np.load("integrals/cc-pVDZ/Ethylene/No#_05_No(c)_6_Ne(a)_4_No(a)_3.npz")
 h1, eri, e_core = d["h1"], d["eri"], float(d["e_core"])
 nele, norb = int(d["nele_cas"]), int(d["norb_cas"])
 print(float(d["e_hf"]), float(d["e_casci"]))
@@ -116,9 +117,7 @@ through OpenFermion-PySCF, to about 1e-13. It can be used directly with CUDA-Q
 ### With this repository
 
 ```python
-import sys
-sys.path.insert(0, "final_run")
-from integrals import load_integrals, qubit_hamiltonian
+from vqe_cudaq.hamiltonian import load_integrals, qubit_hamiltonian
 
 data = load_integrals("integrals", "cc-pVDZ", "Ethylene", 6, 4, 3)   # ncore, nele, norb
 qubit_ham = qubit_hamiltonian(data)
@@ -131,12 +130,12 @@ array shapes (integrals and amplitudes) match the active space, and refuses the 
 The VQE run uses the files directly:
 
 ```bash
-python final_run/2026_SEP_Optimized_VQE.py --molecule Ethylene --space_idx 4 --integrals integrals
+python -m vqe_cudaq.cli --molecule Ethylene --space_idx 4 --integrals integrals
 ```
 
 The starting point is the stored `t1_active` / `t2_active`, packed into the CUDA-Q UCCSD
-parameter order by `build_theta0_and_labels_standard` in that script (the same packer as
-the geometry route).
+parameter order by `build_theta0_and_labels_standard` in `vqe_cudaq/operators.py` (the
+same packer as the geometry route).
 
 The same files are used by the MIMIQ version of the benchmark
 ([mimiq-vqe](https://github.com/ItsKhuramShahzad/mimiq-vqe)), so both simulators solve
@@ -145,7 +144,7 @@ identical Hamiltonians from identical CCSD starting points.
 ## How they were made
 
 ```bash
-python final_run/dump_active_integrals.py --basis sto-3g 6-31g cc-pVDZ --molecule <name>
+python scripts/dump_integrals.py --basis sto-3g 6-31g cc-pVDZ --molecule <name>
 ```
 
 Restricted Hartree-Fock with PySCF, then PySCF CASCI for each active space. Each file was

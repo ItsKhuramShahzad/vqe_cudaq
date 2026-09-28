@@ -16,7 +16,7 @@ from pyscf import cc, mcscf
 import cudaq
 
 from . import config
-from .utils import sanitize_name, save_pkl, stable_hash
+from .utils import sanitize_name, save_pkl, stable_hash, run_metadata
 from .backend import configure_cudaq_target
 from .insights import collect_pyscf_insights
 from .operators import (
@@ -25,13 +25,20 @@ from .operators import (
     slice_ccsd_to_active,
     build_theta0_and_labels_standard,
 )
-from .ansatz import hea_num_parameters
+from .ansatz import hea_num_parameters, energy_expectation
+from .hamiltonian import IntegralFiles, SpaceDoesNotFit, qubit_hamiltonian
 from .vqe import best_of_jitters_one_chunk, vqe_until_converged
 from .xyz import geometry_in_angstrom
 
 
-def run_one_molecule(mol_name: str, spec: dict):
-    """Run every active space of one molecule and return the rich result dict."""
+def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
+    """Run every active space of one molecule and return the rich result dict.
+
+    integrals_dir: read the active-space Hamiltonian, E_HF, E_CCSD, E_CASCI and the
+    CCSD amplitudes from saved integral files under this folder instead of running
+    PySCF (closed-shell only). Missing files are computed and saved there. Without
+    it, the geometry route (SCF + CCSD + CASCI here) is used, unchanged.
+    """
     # ── snapshot run configuration ────────────────────────────────────
     BASIS = config.BASIS
     TAG = config.TAG
@@ -56,63 +63,100 @@ def run_one_molecule(mol_name: str, spec: dict):
     VQE_JITTER_BETWEEN_CYCLES = config.VQE_JITTER_BETWEEN_CYCLES
     VQE_JITTER_BETWEEN_SCALE = config.VQE_JITTER_BETWEEN_SCALE
     PRINT_EVERY_CYCLE = config.PRINT_EVERY_CYCLE
+    MAX_MEMORY = config.MAX_MEMORY
     # ──────────────────────────────────────────────────────────────────
 
     mol_name_clean = sanitize_name(mol_name)
 
-    # OpenFermion MolecularData interprets coordinates as angstrom.  Normalize
-    # explicitly because a few database geometries are recorded in bohr.
-    geometry = geometry_in_angstrom(spec)
     charge = int(spec["charge"])
     multiplicity = int(spec["multiplicity"])
 
     active_spaces = spec["valid_active_spaces"]
 
-    moldata = openfermion.MolecularData(geometry, BASIS, multiplicity, charge)
-    t0 = time.time()
-    molecule = openfermionpyscf.run_pyscf(moldata, run_scf=True, run_fci=False)
-    t1 = time.time()
+    files = None
+    molecule = mf = None
+    if integrals_dir is not None:
+        # Integral-file mode: no SCF/CCSD here, everything comes from the files.
+        if multiplicity != 1:
+            raise ValueError(f"{mol_name}: integral files are closed-shell only")
+        from .molecules import molecules as MOLECULES
+        files = IntegralFiles(integrals_dir, mol_name, spec, BASIS, max_memory=MAX_MEMORY,
+                              all_spaces=MOLECULES.get(mol_name, spec)["valid_active_spaces"])
+        first = None
+        for s in active_spaces:
+            try:
+                first = files.get(int(s["ncore"]), int(s["nele_cas"]), int(s["norb_cas"]))
+                break
+            except SpaceDoesNotFit:
+                continue
+        if first is None:
+            raise ValueError(f"no active space of {mol_name} fits the {BASIS} basis")
 
-    mf = molecule._pyscf_data["scf"]
-    pyscf_info = collect_pyscf_insights(mf, molecule)
+        t1amp = t2amp = None
+        nmo = int(first["nmo"])
+        nelec = int(first["n_electrons"])
+        nocc = nelec // 2
+        nvir = nmo - nocc
+        HF_FULL = float(first["e_hf"])
+        is_open_shell = False
+        E_CCSD_FULL = float(first["e_ccsd"])
+        ccsd_block = {"computed": True, "E_ccsd_total": E_CCSD_FULL,
+                      "E_ccsd_corr": float(E_CCSD_FULL - HF_FULL),
+                      "t1_norm": None, "t2_norm": None,
+                      "note": "read from integral files; amplitudes stored per active space."}
+        pyscf_info = {"source": f"integral files: {integrals_dir}"}
+        t0 = t1 = 0.0                    # the timing entry is set from files.seconds below
+    else:
+        # OpenFermion MolecularData interprets coordinates as angstrom.  Normalize
+        # explicitly because a few database geometries are recorded in bohr.
+        geometry = geometry_in_angstrom(spec)
 
-    # ── CHANGE 1: open-shell skip block REMOVED ───────────────────────────
-    # Previously returned skipped dict here if mf.mol.spin != 0
-    # Now open-shell molecules continue and run normally
+        moldata = openfermion.MolecularData(geometry, BASIS, multiplicity, charge)
+        t0 = time.time()
+        molecule = openfermionpyscf.run_pyscf(moldata, run_scf=True, run_fci=False)
+        t1 = time.time()
 
-    nmo = mf.mo_coeff.shape[1]
-    nocc = mf.mol.nelectron // 2
-    nvir = nmo - nocc
+        mf = molecule._pyscf_data["scf"]
+        pyscf_info = collect_pyscf_insights(mf, molecule)
 
-    HF_FULL = float(molecule.hf_energy)
-    is_open_shell = int(mf.mol.spin) != 0
+        # ── CHANGE 1: open-shell skip block REMOVED ───────────────────────
+        # Previously returned skipped dict here if mf.mol.spin != 0
+        # Now open-shell molecules continue and run normally
 
-    ccsd_block = {"computed": False, "E_ccsd_total": None, "E_ccsd_corr": None,
-                  "t1_norm": None, "t2_norm": None, "note": None}
-    t1amp = None
-    t2amp = None
-    E_CCSD_FULL = None
+        nmo = mf.mo_coeff.shape[1]
+        nelec = int(mf.mol.nelectron)
+        nocc = mf.mol.nelectron // 2
+        nvir = nmo - nocc
 
-    if RUN_CCSD_REFERENCE:
-        try:
-            if not is_open_shell:
-                # Closed-shell: original unchanged
-                mycc = cc.CCSD(mf)
-            else:
-                # Open-shell: UCCSD instead
-                mycc = cc.UCCSD(mf)
-            ecc_corr, t1amp, t2amp = mycc.kernel()
-            E_CCSD_FULL = float(mf.e_tot + ecc_corr)
-            ccsd_block.update({
-                "computed": True,
-                "E_ccsd_total": float(E_CCSD_FULL),
-                "E_ccsd_corr": float(ecc_corr),
-                "t1_norm": float(np.linalg.norm(np.asarray(t1amp))),
-                "t2_norm": float(np.linalg.norm(np.asarray(t2amp))),
-                "note": "CCSD full-system amplitudes used for theta0 slicing.",
-            })
-        except Exception as e:
-            ccsd_block.update({"computed": False, "note": f"CCSD failed: {repr(e)}"})
+        HF_FULL = float(molecule.hf_energy)
+        is_open_shell = int(mf.mol.spin) != 0
+
+        ccsd_block = {"computed": False, "E_ccsd_total": None, "E_ccsd_corr": None,
+                      "t1_norm": None, "t2_norm": None, "note": None}
+        t1amp = None
+        t2amp = None
+        E_CCSD_FULL = None
+
+        if RUN_CCSD_REFERENCE:
+            try:
+                if not is_open_shell:
+                    # Closed-shell: original unchanged
+                    mycc = cc.CCSD(mf)
+                else:
+                    # Open-shell: UCCSD instead
+                    mycc = cc.UCCSD(mf)
+                ecc_corr, t1amp, t2amp = mycc.kernel()
+                E_CCSD_FULL = float(mf.e_tot + ecc_corr)
+                ccsd_block.update({
+                    "computed": True,
+                    "E_ccsd_total": float(E_CCSD_FULL),
+                    "E_ccsd_corr": float(ecc_corr),
+                    "t1_norm": float(np.linalg.norm(np.asarray(t1amp))),
+                    "t2_norm": float(np.linalg.norm(np.asarray(t2amp))),
+                    "note": "CCSD full-system amplitudes used for theta0 slicing.",
+                })
+            except Exception as e:
+                ccsd_block.update({"computed": False, "note": f"CCSD failed: {repr(e)}"})
 
     # cudaq.set_target(TARGET)
     cudaq_precision = configure_cudaq_target()
@@ -125,6 +169,7 @@ def run_one_molecule(mol_name: str, spec: dict):
         "target": TARGET,
         "target_precision_option": TARGET_PRECISION,
         "cudaq_precision": cudaq_precision,
+        "run_metadata": run_metadata(),
         "optimizer": OPTIMIZER,
         "seed": int(SEED),
         "input_spec": spec,
@@ -138,6 +183,8 @@ def run_one_molecule(mol_name: str, spec: dict):
         "system_sizes": {"nmo": int(nmo), "nocc": int(nocc), "nvir": int(nvir)},
         "active_space_runs": [],
     }
+    if files is not None:
+        molecule_results["integrals"] = {"dir": os.path.abspath(integrals_dir), "files_made": []}
 
     # ── Active-space loop ─────────────────────────────────────────────────
     for space in active_spaces:
@@ -166,25 +213,34 @@ def run_one_molecule(mol_name: str, spec: dict):
             })
             continue
 
-        if (2 * ncore + nele_cas) != int(mf.mol.nelectron):
+        if (2 * ncore + nele_cas) != nelec:
             molecule_results["active_space_runs"].append({
                 "space": space, "skipped": True,
                 "skip_reason": (
                     f"CASCI sanity fail: 2*ncore+nele_cas="
-                    f"{2*ncore+nele_cas} != nelec={mf.mol.nelectron}"
+                    f"{2*ncore+nele_cas} != nelec={nelec}"
                 ),
             })
             continue
 
-        casci = mcscf.CASCI(mf, norb_cas, nele_cas)
-        casci.ncore = ncore
-        casci_out = casci.kernel()
-        E_CASCI = float(casci_out[0])
+        data = None
+        if files is not None:
+            # CASCI energy, Hamiltonian and CCSD amplitudes from the integral file
+            data = files.get(ncore, nele_cas, norb_cas)
+            E_CASCI = float(data["e_casci"])
+            qop = qubit_hamiltonian(data)
+            molecule_results["timing"]["pyscf_run_scf_seconds"] = float(files.seconds)
+            molecule_results["integrals"]["files_made"] = list(files.made)
+        else:
+            casci = mcscf.CASCI(mf, norb_cas, nele_cas)
+            casci.ncore = ncore
+            casci_out = casci.kernel()
+            E_CASCI = float(casci_out[0])
 
-        molecular_ham = molecule.get_molecular_hamiltonian(
-            occupied_indices=occ, active_indices=act)
-        fermion_ham = get_fermion_operator(molecular_ham)
-        qop = jordan_wigner(fermion_ham)
+            molecular_ham = molecule.get_molecular_hamiltonian(
+                occupied_indices=occ, active_indices=act)
+            fermion_ham = get_fermion_operator(molecular_ham)
+            qop = jordan_wigner(fermion_ham)
         qubit_ham = make_qubitop_real(qop, tol=JW_IMAG_TOL)
         c0, qubit_ham_nc = split_constant(qubit_ham)
         spin_nc = cudaq.SpinOperator(qubit_ham_nc)
@@ -200,7 +256,16 @@ def run_one_molecule(mol_name: str, spec: dict):
             # Closed-shell: CCSD-sliced theta0 using the CORRECTED packer
             # (CUDA-Q block order + factor of 2 on doubles).
             labels0 = None
-            if (t1amp is not None) and (t2amp is not None):
+            if data is not None:
+                # the stored active-space amplitudes, same corrected packer
+                theta0, labels0, expected_check = build_theta0_and_labels_standard(
+                    data["t1_active"], data["t2_active"], nele_cas=nele_cas,
+                    norb_cas=norb_cas, scale=THETA_SCALE)
+                if expected_check != expected or any(l == ("PAD",) for l in labels0):
+                    raise RuntimeError(f"{mol_name} ({nele_cas},{norb_cas}): the packer had to "
+                                       f"pad or cut theta0 to {expected} parameters")
+                theta0_source = "CCSD-sliced (corrected packer, x2 doubles, from integral file)"
+            elif (t1amp is not None) and (t2amp is not None):
                 _, _, t1_act, t2_act = slice_ccsd_to_active(
                     t1amp, t2amp, nocc=nocc, nmo=nmo, active_orbs=act)
                 theta0, labels0, expected_check = build_theta0_and_labels_standard(
@@ -226,6 +291,21 @@ def run_one_molecule(mol_name: str, spec: dict):
             theta0 = local_rng.uniform(-0.1, 0.1, expected)
             theta0_source = f"seeded_uniform seed={SEED}"
             # ──────────────────────────────────────────────────────────────
+
+        # Guard: closed-shell runs must use the corrected CCSD packer at full scale
+        if not is_open_shell:
+            if not theta0_source.startswith("CCSD-sliced (corrected packer"):
+                raise RuntimeError(f"{mol_name} ({nele_cas},{norb_cas}): theta0 source is "
+                                   f"'{theta0_source}'")
+            if THETA_SCALE != 1.0:
+                raise RuntimeError(f"THETA_SCALE must be 1.0, got {THETA_SCALE}")
+
+        # Energy of the circuit at theta = 0 (reference) and at theta0 (start),
+        # before any optimisation or seed search
+        E_ref_start_nc = energy_expectation(spin_nc, qubit_count, nele_cas,
+                                            np.zeros(expected), open_shell=is_open_shell)
+        E_theta0_nc = energy_expectation(spin_nc, qubit_count, nele_cas,
+                                         theta0, open_shell=is_open_shell)
 
         is_heavy = expected > HEAVY_PARAM_THRESHOLD
         local_restarts = N_JITTER_RESTARTS if not is_heavy else HEAVY_RESTARTS
@@ -292,6 +372,8 @@ def run_one_molecule(mol_name: str, spec: dict):
                 "source": theta0_source,
                 "theta_scale": float(THETA_SCALE),
                 "theta0_norm": float(np.linalg.norm(theta0)),
+                "E_ref_total": float(c0 + E_ref_start_nc),   # circuit at theta = 0 (should equal HF)
+                "E_theta0_total": float(c0 + E_theta0_nc),   # circuit at theta0, before optimisation
             },
             "seed_search": seed_out,
             "vqe": {
@@ -323,7 +405,7 @@ def run_one_molecule(mol_name: str, spec: dict):
     return molecule_results
 
 
-def run_all_molecules(molecules: dict, out_dir: str = "pkl_results"):
+def run_all_molecules(molecules: dict, out_dir: str = "pkl_results", integrals_dir: str = None):
     """Run every molecule in ``molecules`` and write one PKL per molecule."""
     TAG = config.TAG
     BASIS = config.BASIS
@@ -345,7 +427,7 @@ def run_all_molecules(molecules: dict, out_dir: str = "pkl_results"):
         print(f"[RUN] {mol_name} -> {out_path}", flush=True)
 
         try:
-            mol_res = run_one_molecule(mol_name, spec)
+            mol_res = run_one_molecule(mol_name, spec, integrals_dir=integrals_dir)
         except Exception as e:
             print(f"[ERROR] {mol_name}: {repr(e)}", flush=True)
             continue

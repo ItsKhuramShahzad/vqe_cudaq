@@ -20,9 +20,15 @@ env/
 .ipynb_checkpoints/
 
 # Results & data
-results/
+results/*
 *.pkl
 *.csv
+# ...except the published CUDA-Q reference results
+!results/README.md
+!results/cpu/
+!results/gpu/
+!results/cpu/*.pkl
+!results/gpu/*.pkl
 molecular_orbitals/
 *.cube
 *.molden
