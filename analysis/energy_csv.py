@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
 """
-Build a per-(molecule, active-space) energy comparison CSV from the
-25_FEB_2026 CPU + GPU VQE pkl results.
+Build a per-(molecule, active-space) energy comparison CSV from the CPU and GPU
+VQE result files in results/cpu and results/gpu. Writes analysis/vqe_energy_table.csv.
 
 Columns
 -------
@@ -21,9 +21,9 @@ import os, sys, csv, glob, pickle
 BASE = os.path.dirname(os.path.abspath(__file__))     # .../vqe_cudaq/analysis
 ROOT = os.path.dirname(BASE)                          # repo root
 
-# Point these at the CPU/GPU result folders for the run you want to tabulate.
-CPU_DIR = os.path.join(ROOT, "results", "pkl_results", "cpu_pkl_results")
-GPU_DIR = os.path.join(ROOT, "results", "pkl_results", "gpu_pkl_results")
+# CPU/GPU result folders (change them to tabulate another run).
+CPU_DIR = os.path.join(ROOT, "results", "cpu")
+GPU_DIR = os.path.join(ROOT, "results", "gpu")
 OUT_CSV = os.path.join(BASE, "vqe_energy_table.csv")
 
 # Only keep active spaces that are CURRENTLY listed in the molecule database

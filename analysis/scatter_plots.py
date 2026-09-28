@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
 """
-Scatter plots from 25_FEB_2026_vqe_energy_table.csv
+Scatter plots from analysis/vqe_energy_table.csv (written by energy_csv.py)
 
 Generates 6 scatter plots, each point coloured/marked per molecule:
   1  %AS wrt Orbitals   vs  E_VQE_GPU - E_HF      (correlation vs orbital frac)
@@ -12,9 +12,9 @@ Generates 6 scatter plots, each point coloured/marked per molecule:
   6  %AS wrt Orbitals   vs  E_VQE_GPU - E_VQE_CPU  (GPU-CPU gap, log y)
 
 Outputs:
-  figures/scatter/<key>.png          one PNG per plot
-  figures/scatter/scatter_panel.png  combined 2x3 panel
-  tex_out/<key>.tex / _embed.tex     pgfplots (standalone + embeddable)
+  analysis/figures/scatter/<key>.png          one PNG per plot
+  analysis/figures/scatter/scatter_panel.png  combined 2x3 panel
+  analysis/tex_out/<key>.tex / _embed.tex     pgfplots (standalone + embeddable)
 """
 
 import os

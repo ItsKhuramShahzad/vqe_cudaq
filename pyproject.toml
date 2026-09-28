@@ -9,7 +9,7 @@ description = "Active-space VQE benchmarking of molecular ground-state energies 
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-authors = [{ name = "Khuram Shahzad" }]
+authors = [{ name = "Khuram Shahzad" }, { name = "Rosa Di Felice" }]
 keywords = ["VQE", "CUDA-Q", "quantum chemistry", "OpenFermion", "PySCF", "UCCSD"]
 
 # NOTE: CUDA-Q (`cuda-quantum`) must be installed separately per NVIDIA's
@@ -36,3 +36,4 @@ vqe-cudaq = "vqe_cudaq.cli:main"
 
 [tool.setuptools]
 packages = ["vqe_cudaq", "analysis"]
+

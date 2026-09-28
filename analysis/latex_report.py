@@ -40,6 +40,9 @@ from collections import defaultdict
 
 warnings.filterwarnings("ignore")
 
+BASE = os.path.dirname(os.path.abspath(__file__))     # .../vqe_cudaq/analysis
+ROOT = os.path.dirname(BASE)                          # repo root
+
 JITTER = 0.06   # horizontal jitter per Ne level at the same No
 
 # ──────────────────────────────────────────────────────────────────
@@ -4891,12 +4894,12 @@ def cli():
     p = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Generate LaTeX/PGFPlots .tex files from VQE benchmark pkl data.")
-    p.add_argument("--cpu_dir", default="results/pkl_results/cpu_pkl_results",
-                   help="Directory with CPU .pkl files  [cpu_pkl_results]")
-    p.add_argument("--gpu_dir", default="results/pkl_results/gpu_pkl_results",
-                   help="Directory with GPU .pkl files  [gpu_pkl_results]")
-    p.add_argument("--out",     default="tex_out",
-                   help="Output directory for .tex files  [tex_out]")
+    p.add_argument("--cpu_dir", default=os.path.join(ROOT, "results", "cpu"),
+                   help="Directory with CPU .pkl files  [results/cpu]")
+    p.add_argument("--gpu_dir", default=os.path.join(ROOT, "results", "gpu"),
+                   help="Directory with GPU .pkl files  [results/gpu]")
+    p.add_argument("--out",     default=os.path.join(BASE, "tex_out"),
+                   help="Output directory for .tex files  [analysis/tex_out]")
     p.add_argument("--figs",   nargs="*",
                    default=["1","2","3","4","5","6","7","8","9",
                             "10","11","12","13","14","15","16",

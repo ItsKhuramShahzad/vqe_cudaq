@@ -1,7 +1,4 @@
-# Quantum Benchmarking of Molecular Ground-State Energy Estimation
-
-Code and data for the paper *Acceleration of molecular ground-state energy estimation
-with the variational quantum eigensolver using CUDA-Q* (K. Shahzad and R. Di Felice).
+# Acceleration of molecular ground-state energy estimation with the variational quantum eigensolver using CUDA-Q
 
 A **Variational Quantum Eigensolver (VQE)** framework for molecular
 ground-state energies using **CUDA-Q**, **OpenFermion**, and **PySCF**, plus a
@@ -105,19 +102,19 @@ Each molecule has the same 9 active spaces, from 6 to 14 qubits, written as
 ```
 vqe_cudaq/
 ├── README.md
-├── pyproject.toml
+├── pyproject.toml            # package metadata
 ├── requirements.txt
 ├── LICENSE
-├── vqe_cudaq/                 # the VQE engine (import as `vqe_cudaq`)
-│   ├── __init__.py            # lazy exports; data/config import without CUDA-Q
+├── vqe_cudaq/                # the VQE engine (import as `vqe_cudaq`)
+│   ├── __init__.py           # lazy exports; data/config import without CUDA-Q
 │   ├── config.py             # run settings (CLI overrides mutate these)
-│   ├── molecules.py          # molecule database (geometry + valid active spaces)
+│   ├── molecules.py          # the 12 molecules: geometry, source, 9 active spaces
 │   ├── active_space.py       # CAS generation, validation, and analysis
 │   ├── xyz.py                # validated XYZ serialization and batch export
-│   ├── utils.py              # logging, filenames, pickling, stable hashing
-│   ├── backend.py            # CUDA-Q target selection + version tripwire
+│   ├── utils.py              # logging, filenames, pickling, stable hashing, run metadata
+│   ├── backend.py            # CUDA-Q target selection, fp64 check, version tripwire
 │   ├── operators.py          # qubit-op helpers + CCSD→UCCSD θ₀ packing
-│   ├── hamiltonian.py        # standalone active-space builder (for dump_integrals)
+│   ├── hamiltonian.py        # integral files: make, save, load; qubit Hamiltonian
 │   ├── ansatz.py             # UCCSD / HEA kernels + energy expectation
 │   ├── vqe.py                # single-chunk / multi-cycle / jitter optimizers
 │   ├── insights.py           # PySCF/OpenFermion diagnostics
@@ -125,18 +122,24 @@ vqe_cudaq/
 │   ├── orbitals.py           # MO calculation, export, diagrams, 3D isosurfaces
 │   ├── driver.py             # run_one_molecule / run_all_molecules
 │   └── cli.py                # command-line entry point
-├── analysis/                 # reporting tools (no CUDA-Q needed)
-│   ├── energy_csv.py         # per-config energy table (HF/CCSD/CASCI/VQE, speedup)
-│   ├── scatter_plots.py      # static scatter plots (PNG + PDF + PGFPlots .tex)
+├── analysis/                 # reporting tools (no CUDA-Q needed); outputs stay in here
+│   ├── energy_csv.py         # per-config energy table -> vqe_energy_table.csv
+│   ├── scatter_plots.py      # static scatter plots -> figures/scatter/, tex_out/
 │   ├── scatter_interactive.py# interactive hover plots (Plotly HTML)
-│   └── latex_report.py       # full PGFPlots/LaTeX figure + report generator
+│   └── latex_report.py       # full PGFPlots/LaTeX figure report -> tex_out/
 ├── scripts/
-│   └── dump_integrals.py
+│   └── dump_integrals.py     # writes the integral files from the geometries
 ├── notebooks/
 │   └── Molecular_Orbital_Visualization.ipynb
-├── integrals/                # active-space integrals + CCSD amplitudes (.npz), see its README
-├── geometries( xyz_files)/     # XYZ files; images/ holds the molecule pictures
-└── results/                  # CUDA-Q reference PKLs in cpu/ and gpu/ (see its README);
+├── integrals/                # active-space integrals + CCSD amplitudes (see its README)
+│   ├── cc-pVDZ/<molecule>/No#_01_No(c)_..._No(a)_4.npz   # 9 files per molecule
+│   ├── 6-31g/
+│   └── sto-3g/
+├── geometries( xyz_files)/   # <molecule>.xyz for the 12 molecules
+│   └── images/               # <molecule>.png, shown in this README
+└── results/                  # CUDA-Q reference results (see its README)
+    ├── cpu/                  # 12 PKLs, qpp-cpu target
+    └── gpu/                  # 12 PKLs, nvidia target
                               # other run outputs here are git-ignored
 ```
 
@@ -387,24 +390,22 @@ CUDA-Q packing.
 
 ## 📊 Analysis & reporting
 
-Run the CPU and GPU benchmarks, then point the analysis tools at the two result
-folders. From the repo root:
+The analysis tools read the CPU and GPU results in `results/cpu` and `results/gpu`
+and write everything under `analysis/`. They work from any folder:
 
 ```bash
-# 1) Build the per-configuration energy table (edit CPU_DIR/GPU_DIR at the top)
+# 1) Energy table -> analysis/vqe_energy_table.csv (CPU_DIR/GPU_DIR at the top)
 python analysis/energy_csv.py
 
-# 2) Static scatter plots (PNG + PDF + PGFPlots .tex)
+# 2) Static scatter plots -> analysis/figures/scatter, analysis/tex_out
 python analysis/scatter_plots.py
 
-# 3) Interactive hover plots (Plotly HTML)
+# 3) Interactive hover plots -> analysis/figures/scatter/scatter_interactive.html
 python analysis/scatter_interactive.py
 
-# 4) Full LaTeX / PGFPlots figure report
-python analysis/latex_report.py \
-    --cpu_dir results/pkl_results/cpu_pkl_results \
-    --gpu_dir results/pkl_results/gpu_pkl_results \
-    --out analysis/tex_out
+# 4) Full LaTeX / PGFPlots figure report -> analysis/tex_out
+python analysis/latex_report.py
+# another run: --cpu_dir DIR --gpu_dir DIR --out DIR
 ```
 
 Each per-molecule PKL contains HF / CCSD / CASCI / VQE energies, qubit &
@@ -412,9 +413,12 @@ parameter counts, convergence history, and CPU/GPU runtime breakdowns.
 
 ---
 
-## 👤 Author
+## 👤 Authors
 
-**Khuram Shahzad** — PhD Researcher, Quantum Computing for Quantum Chemistry
+**Khuram Shahzad**<sup>1,\*</sup> and **[Rosa Di Felice](https://dornsife.usc.edu/profile/rosa-di-felice/)**<sup>2,3,\*</sup>
 
-**[Prof. Rosa Di Felice]([url](https://dornsife.usc.edu/profile/rosa-di-felice/))** — Professor of Physics and Astronomy and Quantitative and Computational Biology
+1. Department of Physics, Informatics and Mathematics, University of Modena and Reggio Emilia, 41125 Modena, Italy
+2. Departments of Physics and Astronomy, and Quantitative and Computational Biology, University of Southern California, Los Angeles, CA 90089, USA
+3. CNR Institute of Nanoscience, 41125 Modena, Italy
 
+\* Corresponding authors

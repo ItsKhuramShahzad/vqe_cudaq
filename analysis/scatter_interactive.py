@@ -2,13 +2,13 @@
 #!/usr/bin/env python3
 """
 Interactive (hover) version of the scatter plots, from
-25_FEB_2026_vqe_energy_table.csv.
+analysis/vqe_energy_table.csv (written by energy_csv.py).
 
 Produces ONE self-contained HTML file containing all 12 plots. Hovering any
 dot shows: molecule, active space (Ne,No), qubits, %AS, and the x/y values --
 so every active-space configuration is uniquely identifiable.
 
-  figures/scatter/scatter_interactive.html
+  analysis/figures/scatter/scatter_interactive.html
 """
 
 import os
