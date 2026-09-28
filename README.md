@@ -1,5 +1,8 @@
 # Quantum Benchmarking of Molecular Ground-State Energy Estimation
 
+Code and data for the paper *Acceleration of molecular ground-state energy estimation
+with the variational quantum eigensolver using CUDA-Q* (K. Shahzad and R. Di Felice).
+
 A **Variational Quantum Eigensolver (VQE)** framework for molecular
 ground-state energies using **CUDA-Q**, **OpenFermion**, and **PySCF**, plus a
 self-contained **analysis / reporting** suite (energy tables, scatter plots,
@@ -293,48 +296,92 @@ are ignored by Git because cube files can be very large.
 
 ## 🚀 Running the VQE
 
+### Quick start: from the saved integral files (recommended)
+
+The repository ships the active-space integrals **and** the CCSD starting amplitudes
+for all 12 molecules and 9 active spaces in `integrals/` (cc-pVDZ, 6-31G and STO-3G).
+With `--integrals integrals` a run reads everything it needs from these files: no
+Hartree–Fock, no CCSD and no integral transformation of the whole molecule. This is
+the easiest way to run the benchmark, and it works on a laptop even for the largest
+molecules, whose full-molecule integrals need a compute node with hundreds of GB of
+memory. The files give the same Hamiltonians and energies as the geometry route
+(checked to 3e-13 Ha).
+
+Run the commands from the repository root:
+
 ```bash
-# Single molecule, GPU
+# Smallest test: Ethylene, one active space (4 electrons in 3 orbitals, 6 qubits), CPU
+python -m vqe_cudaq.cli --molecule Ethylene --space_idx 4 --target qpp-cpu --integrals integrals
+
+# All 9 active spaces of one molecule, CPU
+python -m vqe_cudaq.cli --molecule Benzene --target qpp-cpu --integrals integrals
+
+# The same on an NVIDIA GPU (double precision is the default and is enforced)
+python -m vqe_cudaq.cli --molecule Benzene --target nvidia --integrals integrals
+
+# All 12 molecules
+python -m vqe_cudaq.cli --all --target qpp-cpu --integrals integrals
+
+# Another basis set (folder names in integrals/: cc-pVDZ, 6-31g, sto-3g)
+python -m vqe_cudaq.cli --molecule Uracil --basis 6-31g --target qpp-cpu --integrals integrals
+```
+
+`--space_idx` selects one active space; the numbering is the same for every molecule:
+
+| `--space_idx` | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| (electrons, orbitals) | (6,4) | (6,5) | (6,6) | (6,7) | (4,3) | (4,4) | (4,5) | (2,3) | (2,4) |
+| qubits | 8 | 10 | 12 | 14 | 6 | 8 | 10 | 6 | 8 |
+
+The 6- and 8-qubit spaces finish in minutes on a laptop; the 14-qubit space (6,7) takes
+hours on a CPU node and much less on a GPU. In STO-3G a few active spaces do not fit the
+smaller basis and are skipped (for example 4 of the 9 for NH<sub>2</sub><sup>&minus;</sup>).
+
+**Output.** One PKL per molecule in `--out_dir` (default `pkl_results/`), named
+`<date>_<molecule>_<basis>_<target>_COBYLA_VQE_results.pkl`. Runs of different
+`--space_idx` of the same molecule on the same day have the same file name, so give each
+its own `--out_dir`. For every active space the PKL holds the HF, CCSD, CASCI and final
+VQE energies, the circuit energy at the CCSD starting point (`theta0.E_theta0_total`) and
+at theta = 0 (`theta0.E_ref_total`, equal to E_HF), the convergence trace, the timings
+and the run metadata (package versions, host, SLURM job, GPU, hash of the `vqe_cudaq`
+code). A successful run reaches the CASCI energy of each active space (see
+`compare.d_vqe_minus_casci`).
+
+If a file is missing (for instance for a new molecule), it is computed with PySCF and
+saved in `integrals/` on the fly; `--max-memory` sets the PySCF memory limit in MB.
+The file format is described in [`integrals/README.md`](integrals/README.md); the files
+are made with `scripts/dump_integrals.py`.
+
+### From the geometry
+
+Without `--integrals`, each run starts from the geometry in `vqe_cudaq/molecules.py`:
+Hartree–Fock and CCSD of the whole molecule, then CASCI and the Hamiltonian of each
+active space. Use this for a new molecule or basis set; for the large molecules it needs
+a compute node with a lot of memory.
+
+```bash
+python -m vqe_cudaq.cli --molecule Ethylene --target qpp-cpu --space_idx 4
 python -m vqe_cudaq.cli --molecule Ethylene --target nvidia --basis cc-pVDZ
-
-# Single molecule, CPU, one active space only
-python -m vqe_cudaq.cli --molecule Benzene --target qpp-cpu --space_idx 0
-
-# All molecules
 python -m vqe_cudaq.cli --all --target qpp-cpu --optimizer COBYLA
 ```
 
-Or from Python:
+### From Python
 
 ```python
 from vqe_cudaq import run_one_molecule
 from vqe_cudaq.molecules import molecules
 
-result = run_one_molecule("Ethylene", molecules["Ethylene"])
+result = run_one_molecule("Ethylene", molecules["Ethylene"], integrals_dir="integrals")
+# without integrals_dir, the run starts from the geometry
 ```
 
-Default run settings live in `vqe_cudaq/config.py` and can be overridden on the
-CLI (`--basis`, `--target`, `--precision`, `--optimizer`, `--out_dir`).
+### Settings
 
-### Final benchmark run
-
-The CPU/GPU benchmark runs use one software environment and one set of settings on
-both backends: fp64 is enforced (a run that is not fp64 stops), the closed-shell CCSD
-starting point is checked, and every PKL records the run metadata (package versions,
-host, SLURM job, GPU, and a hash of the `vqe_cudaq` code). A run can start from the
-geometry or from the saved integral files in `integrals/`, which give the same
-Hamiltonians without the full-molecule integral transformation:
-
-```bash
-python -m vqe_cudaq.cli --molecule Benzene --target qpp-cpu --integrals integrals
-python -m vqe_cudaq.cli --molecule Benzene --target nvidia --precision fp64 --integrals integrals
-```
-
-Missing integral files are computed and saved on the fly. Each active space also stores
-the circuit energy at theta = 0 (`E_ref_total`, equal to E_HF) and at the CCSD starting
-point (`E_theta0_total`), before any optimisation.
-
-See [`integrals/README.md`](integrals/README.md) for the file format.
+Defaults live in `vqe_cudaq/config.py` and can be overridden on the CLI (`--basis`,
+`--target`, `--precision`, `--optimizer`, `--out_dir`, `--integrals`, `--max-memory`).
+Every run uses the same settings on CPU and GPU: fp64 is enforced (a run that is not
+fp64 stops), and closed-shell runs must start from the CCSD amplitudes with the corrected
+CUDA-Q packing.
 
 ---
 
