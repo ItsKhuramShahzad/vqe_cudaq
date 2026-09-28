@@ -67,9 +67,14 @@ vqe_cudaq/
 │   └── latex_report.py       # full PGFPlots/LaTeX figure + report generator
 ├── scripts/
 │   └── dump_integrals.py
+├── final_run/                # script and data of the final CPU/GPU benchmark runs
+│   ├── 2026_SEP_Optimized_VQE.py
+│   ├── molecules_data.py     # 12 molecules, 9 active spaces each
+│   ├── integrals.py          # active-space integrals + CCSD amplitudes: make, save, load
+│   └── dump_active_integrals.py
 ├── notebooks/
 │   └── Molecular_Orbital_Visualization.ipynb
-├── integrals/                # cached active-space integrals (.npz)
+├── integrals/                # active-space integrals + CCSD amplitudes (.npz), see its README
 ├── geometries( xyz_files)/
 └── results/                  # PKL outputs (git-ignored)
 ```
@@ -252,6 +257,21 @@ result = run_one_molecule("Methylene", molecules["Methylene"])
 
 Default run settings live in `vqe_cudaq/config.py` and can be overridden on the
 CLI (`--basis`, `--target`, `--precision`, `--optimizer`, `--out_dir`).
+
+### Final benchmark run
+
+The CPU/GPU runs for the benchmark use `final_run/2026_SEP_Optimized_VQE.py`, with one
+software environment and one set of settings on both backends (fp64 enforced, CCSD
+starting point checked, run metadata recorded). It can start from the geometry or from
+the saved integral files in `integrals/`, which gives the same Hamiltonians without the
+full-molecule integral transformation:
+
+```bash
+cd final_run
+python 2026_SEP_Optimized_VQE.py --molecule Benzene --target qpp-cpu --integrals ../integrals
+```
+
+See [`final_run/README.md`](final_run/README.md) and [`integrals/README.md`](integrals/README.md).
 
 ---
 

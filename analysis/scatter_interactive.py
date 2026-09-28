@@ -36,11 +36,11 @@ RECC = "CASCI Recovery (E_VQE_GPU-E_HF)/(E_CASCI-E_HF)"
 
 MOL_ORDER = [
     "Methylene", "Ethylene",
-    "Benzene", "Naphthalene", "Benzaanthracene", "Pentacene",
+    "Benzene", "Naphthalene", "Tetracene", "Benzaanthracene", "Pentacene",
     "NH2-", "Methanamide",
     "Adenine", "Thymine", "Uracil", "Cytosine", "Guanine",
 ]
-DISPLAY = {"NH2-": "NH2-", "Benzaanthracene": "Benz[a]anthracene"}
+DISPLAY = {"NH2-": "NH2-", "Benzaanthracene": "Tetracene"}   # old result files use Benzaanthracene
 
 # 13 distinct colours + symbols
 COLORS = ["#1f77b4", "#aec7e8", "#ff7f0e", "#ffbb78", "#2ca02c", "#98df8a",

@@ -44,15 +44,15 @@ RECC = "CASCI Recovery (E_VQE_GPU-E_HF)/(E_CASCI-E_HF)"
 # ── molecule order / display / style ───────────────────────────────
 MOL_ORDER = [
     "Methylene", "Ethylene",
-    "Benzene", "Naphthalene", "Benzaanthracene", "Pentacene",
+    "Benzene", "Naphthalene", "Tetracene", "Benzaanthracene", "Pentacene",
     "NH2-", "Methanamide",
     "Adenine", "Thymine", "Uracil", "Cytosine", "Guanine",
 ]
 DISPLAY_MPL = {
-    "NH2-": r"NH$_2^-$", "Benzaanthracene": "Benz[a]anthracene",
+    "NH2-": r"NH$_2^-$", "Benzaanthracene": "Tetracene",
 }
 DISPLAY_TEX = {
-    "NH2-": r"NH$_2^-$", "Benzaanthracene": r"Benz[a]anthracene",
+    "NH2-": r"NH$_2^-$", "Benzaanthracene": r"Tetracene",
 }
 # distinct colours (matplotlib) + marker shapes, 13 molecules
 MPL_COLORS = plt.get_cmap("tab20").colors

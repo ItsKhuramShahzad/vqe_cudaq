@@ -236,7 +236,7 @@ molecules= {
    {'ncore': 20, 'nele_cas': 2, 'norb_cas': 4}
   ]
 },
-'Benzaanthracene': {'formula': 'C18H12',
+'Tetracene': {'formula': 'C18H12',
   'coordinate_unit': 'angstrom',
   'formula': 'C18H12',
   'canonical_formula': 'C18H12',

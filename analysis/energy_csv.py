@@ -40,7 +40,7 @@ ALLOWED_SPACES = {
 # canonical molecule order (matches the latex generator)
 MOL_ORDER = [
     "Methylene", "Ethylene",
-    "Benzene", "Naphthalene", "Benzaanthracene", "Pentacene",
+    "Benzene", "Naphthalene", "Tetracene", "Benzaanthracene", "Pentacene",
     "Methanamide",""
     "Adenine", "Thymine", "Uracil", "Cytosine", "Guanine",
 ]

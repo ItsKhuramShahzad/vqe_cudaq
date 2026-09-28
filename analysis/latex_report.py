@@ -53,7 +53,7 @@ MOL_ORDER = [
     # small
     "Methylene", "Ethylene",
     # PAH / acenes
-    "Benzene", "Naphthalene", "Benzaanthracene", "Pentacene",
+    "Benzene", "Naphthalene", "Tetracene", "Benzaanthracene", "Pentacene",
     # functional groups
     "NH2-", "Methanamide",
     # nucleobases
@@ -87,7 +87,8 @@ DISPLAY = {
     "Ethylene"        : "Ethylene",
     "Benzene"         : "Benzene",
     "Naphthalene"     : "Naphthalene",
-    "Benzaanthracene" : r"Benz[a]anthracene",
+    "Tetracene"       : "Tetracene",
+    "Benzaanthracene" : "Tetracene",          # key used by older result files
     "Pentacene"       : "Pentacene",
     "NH2-"            : r"NH$_2^-$",
     "Methanamide"     : r"Methanamide",
@@ -589,7 +590,7 @@ def mol_label_node(mol_name, mol_disp, bold=False, anchor=None, pos=None):
     Placed AFTER \addplot commands so it renders above bars (correct z-order).
 
     mol_name : canonical key (e.g. 'Cytosine')
-    mol_disp : LaTeX display string (e.g. r'Benz[a]anthracene')
+    mol_disp : LaTeX display string (e.g. r'NH$_2^-$')
     bold     : if True, adds \bfseries
     anchor   : explicit anchor override (e.g. 'north west', 'center', 'south west')
     pos      : explicit rel axis cs position override (e.g. '0.02,0.98')
