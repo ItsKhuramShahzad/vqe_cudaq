@@ -102,7 +102,7 @@ Each molecule has the same 9 active spaces, from 6 to 14 qubits, written as
 ```
 vqe_cudaq/
 ├── README.md
-├── pyproject.toml            # package metadata
+├── pyproject.toml            # package metadata + pytest settings
 ├── requirements.txt
 ├── LICENSE
 ├── vqe_cudaq/                # the VQE engine (import as `vqe_cudaq`)
@@ -129,6 +129,7 @@ vqe_cudaq/
 │   └── latex_report.py       # full PGFPlots/LaTeX figure report -> tex_out/
 ├── scripts/
 │   └── dump_integrals.py     # writes the integral files from the geometries
+├── tests/                    # pytest suite, runs on a CPU (see "Tests" below)
 ├── notebooks/
 │   └── Molecular_Orbital_Visualization.ipynb
 ├── integrals/                # active-space integrals + CCSD amplitudes (see its README)
@@ -410,6 +411,33 @@ python analysis/latex_report.py
 
 Each per-molecule PKL contains HF / CCSD / CASCI / VQE energies, qubit &
 parameter counts, convergence history, and CPU/GPU runtime breakdowns.
+
+---
+
+## ✅ Tests
+
+The tests check every step of the pipeline against the integral files and reference
+results shipped in this repository. They run on the CPU simulator (`qpp-cpu`), so no GPU
+is needed. From the repo root:
+
+```bash
+pip install pytest
+python -m pytest -m "not slow"     # everything except the VQE runs, about 3 minutes
+python -m pytest -m slow           # 5 end-to-end VQE runs, about 4 minutes
+python -m pytest                   # all 671 tests
+```
+
+| File | What it checks |
+|---|---|
+| `test_molecules.py` | the 12 molecules, their 9 active spaces, electron and orbital counts, XYZ files and pictures |
+| `test_integrals.py` | all 320 integral files load, match their names, reproduce CASCI; missing files are made and reused; `dump_integrals.py` rewrites the same files |
+| `test_hamiltonian.py` | qubit Hamiltonian is real and Hermitian, its ground state is CASCI, the circuit at θ = 0 gives E_HF |
+| `test_ansatz.py` | UCCSD parameter counts, Hartree–Fock filling, rotation angle of each parameter |
+| `test_theta0.py` | CCSD → θ₀ packing (order, values, count), θ₀ energy between CASCI and HF, reproduces a published run |
+| `test_backend.py` | CUDA-Q version check, fp64 enforcement, run metadata, machine-independent seeds |
+| `test_results.py` | reference PKLs: corrected packer, VQE within 1.6 mHa of CASCI, energies match the integral files, CPU and GPU agree |
+| `test_analysis.py` | analysis scripts read `results/`, keep the molecule order, and write the tables and LaTeX report |
+| `test_driver.py` (slow) | full runs from integral files, from the geometry and from the CLI reach CASCI |
 
 ---
 

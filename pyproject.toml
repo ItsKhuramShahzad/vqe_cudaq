@@ -37,3 +37,7 @@ vqe-cudaq = "vqe_cudaq.cli:main"
 [tool.setuptools]
 packages = ["vqe_cudaq", "analysis"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: end-to-end VQE runs (deselect with -m \"not slow\")"]
+filterwarnings = ["ignore::DeprecationWarning"]
