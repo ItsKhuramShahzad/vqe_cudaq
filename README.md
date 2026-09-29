@@ -5,8 +5,8 @@ ground-state energies using **CUDA-Q**, **OpenFermion**, and **PySCF**, plus a
 self-contained **analysis / reporting** suite (energy tables, scatter plots,
 publication-ready LaTeX figures).
 
-It targets **active-space Hamiltonians** and a **UCCSD** ansatz (with an
-open-shell **HEA** fallback), and runs on both **GPU (`nvidia`)** and
+It targets closed-shell **active-space Hamiltonians** with a **UCCSD** ansatz, and
+runs on both **GPU (`nvidia`)** and
 **CPU (`qpp-cpu`)** CUDA-Q backends for systematic CPU-vs-GPU benchmarking
 across:
 
@@ -81,7 +81,7 @@ Each molecule has the same 9 active spaces, from 6 to 14 qubits, written as
 ## ✨ Features
 
 - Molecular / active-space Hamiltonians via **OpenFermion + PySCF**
-- Jordan–Wigner mapping; **UCCSD** kernel (closed-shell) and **HEA** (open-shell)
+- Jordan–Wigner mapping; **UCCSD** kernel (`cudaq.kernels.uccsd`)
 - **CCSD-amplitude seeding** of the UCCSD parameters (CUDA-Q-exact packing,
   version-pinned) for a high-quality starting point
 - **CASCI** and full-system **CCSD** references computed per molecule
@@ -115,7 +115,7 @@ vqe_cudaq/
 │   ├── backend.py            # CUDA-Q target selection, fp64 check, version tripwire
 │   ├── operators.py          # qubit-op helpers + CCSD→UCCSD θ₀ packing
 │   ├── hamiltonian.py        # integral files: make, save, load; qubit Hamiltonian
-│   ├── ansatz.py             # UCCSD / HEA kernels + energy expectation
+│   ├── ansatz.py             # UCCSD kernel + energy expectation
 │   ├── vqe.py                # single-chunk / multi-cycle / jitter optimizers
 │   ├── insights.py           # PySCF/OpenFermion diagnostics
 │   ├── visualization.py      # interactive 3D molecular geometry views
