@@ -121,3 +121,56 @@ def test_seed_energy_does_not_depend_on_orbital_signs():
     fresh = H.compute_active_space(mf, 3, 4, 4, ccsd=H.run_ccsd(mf))
     stored = load("sto-3g", "NH2-", 3, 4, 4)
     assert abs(seed_energy(fresh) - seed_energy(stored)) < 1e-8
+
+
+# ── theta0 comes only from CCSD: no zero, padded or random start ──────
+
+def test_packer_refuses_amplitudes_of_another_active_space():
+    """Amplitudes for (4,5) packed as (4,4): wrong count, so an error, never padding or cutting."""
+    t1, t2 = random_amplitudes(4, 5)
+    with pytest.raises(ValueError, match="expects"):
+        pack(t1, t2, 4, 4)
+
+
+def test_open_shell_molecule_stops_before_any_calculation(monkeypatch):
+    """Only closed shell is supported: no HEA, no random start, and no SCF is even run."""
+    import openfermionpyscf
+    from vqe_cudaq.driver import run_one_molecule
+    from vqe_cudaq.molecules import molecules
+
+    def no_scf(*args, **kwargs):
+        raise AssertionError("SCF must not run for an open-shell molecule")
+    monkeypatch.setattr(openfermionpyscf, "run_pyscf", no_scf)
+    triplet = dict(molecules["Ethylene"], multiplicity=3)
+    for integrals_dir in (None, "integrals"):
+        with pytest.raises(ValueError, match="closed-shell"):
+            run_one_molecule("Ethylene", triplet, integrals_dir=integrals_dir)
+
+
+def test_unconverged_ccsd_stops_the_run(monkeypatch):
+    """CCSD that does not converge raises instead of giving a starting point."""
+    import pyscf.cc.ccsd
+    from vqe_cudaq import hamiltonian as H
+    from vqe_cudaq.molecules import molecules
+    mf = H.run_scf(molecules["NH2-"], "sto-3g")
+    monkeypatch.setattr(pyscf.cc.ccsd.CCSD, "max_cycle", 1)
+    with pytest.raises(RuntimeError, match="CCSD did not converge"):
+        H.run_ccsd(mf)
+
+
+def test_geometry_route_stops_when_ccsd_fails(monkeypatch):
+    """Without integral files, a CCSD failure stops the molecule; it is not swallowed."""
+    from vqe_cudaq import config, driver
+    from vqe_cudaq.molecules import molecules
+
+    def failing_ccsd(*args, **kwargs):
+        raise RuntimeError("CCSD did not converge")
+    monkeypatch.setattr(driver, "run_ccsd", failing_ccsd)
+    monkeypatch.setattr(config, "BASIS", "sto-3g")
+    with pytest.raises(RuntimeError, match="CCSD did not converge"):
+        driver.run_one_molecule("NH2-", molecules["NH2-"])
+
+
+def test_no_switch_to_turn_ccsd_off():
+    from vqe_cudaq import config
+    assert not hasattr(config, "RUN_CCSD_REFERENCE")

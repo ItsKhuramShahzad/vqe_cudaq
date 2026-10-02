@@ -148,17 +148,12 @@ def build_theta0_and_labels_standard(t1_act, t2_act, nele_cas, norb_cas, scale=1
     qubit_count = 2 * norb_cas
     expected = int(cudaq.kernels.uccsd_num_parameters(nele_cas, qubit_count))
 
-    # Defensive: with correct inputs len(theta) == expected. Anything else
-    # signals an active-space size or version-skew issue.
-    if len(theta) > expected:
-        theta0 = theta[:expected].copy()
-        labels0 = labels[:expected]
-    elif len(theta) < expected:
-        theta0 = np.zeros(expected, dtype=float)
-        theta0[:len(theta)] = theta
-        labels0 = labels + [("PAD",)] * (expected - len(theta))
-    else:
-        theta0 = theta.copy()
-        labels0 = labels
+    # Every parameter must come from a CCSD amplitude: a different count means the
+    # amplitudes do not belong to this active space (or a CUDA-Q version skew), and
+    # theta0 is never padded with zeros or cut.
+    if len(theta) != expected:
+        raise ValueError(f"CCSD amplitudes give {len(theta)} UCCSD parameters, "
+                         f"cudaq.kernels.uccsd expects {expected} "
+                         f"(nele_cas={nele_cas}, norb_cas={norb_cas})")
 
-    return theta0, labels0, expected
+    return theta, labels, expected

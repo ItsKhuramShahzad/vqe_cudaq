@@ -17,7 +17,6 @@ BASIS = "cc-pVDZ"
 TARGET = "qpp-cpu"                          # e.g. "nvidia" or "qpp-cpu"
 OPTIMIZER = "COBYLA"
 TARGET_PRECISION = "fp64"                   # nvidia defaults to fp32; runs must be fp64
-RUN_CCSD_REFERENCE = True
 
 # ── Integral files (--integrals) ──────────────────────────────────────
 MAX_MEMORY = 16000                          # MB, PySCF limit when a missing file is made

@@ -390,14 +390,19 @@ result = run_one_molecule("Ethylene", molecules["Ethylene"], integrals_dir="inte
 Defaults live in `vqe_cudaq/config.py` and can be overridden on the CLI (`--basis`,
 `--target`, `--precision`, `--optimizer`, `--out_dir`, `--integrals`, `--max-memory`).
 Every run uses the same settings on CPU and GPU: fp64 is enforced (a run that is not
-fp64 stops), and closed-shell runs must start from the CCSD amplitudes with the corrected
-CUDA-Q packing.
+fp64 stops). Only closed-shell molecules are supported, and every active space starts from
+the CCSD amplitudes with the corrected CUDA-Q packing; there is no fallback to zero or random
+parameters: if the CCSD amplitudes cannot be obtained (CCSD fails or does not converge) or
+packed, the run stops with an error.
 
 ### Final benchmark on the clusters
 
 `scripts/run_cpu_final.sh` and `scripts/run_gpu_final.sh` run the 12 molecules as a SLURM
-array (one molecule per task) from the integral files, with identical settings, into
-`results/final_2026/cpu` and `results/final_2026/gpu`. Before starting, each task
+array (one molecule per task, its 9 active spaces one after another, one PKL per
+molecule) from the integral files, with identical settings, into
+`results/final_2026/cpu` and `results/final_2026/gpu`; SLURM logs go to `logs/`. A CPU task
+uses 2 cores and 8 GB, a GPU task one GPU, 1 core and 16 GB (the largest active space,
+14 qubits, needs 4.4 GB including the final-state analysis). Before starting, each task
 checks that the environment has exactly the benchmark versions (CUDA-Q 0.11.0, PySCF
 2.6.2, SciPy 1.16.0, NumPy 1.26.4, OpenFermion 1.6.1, Python 3.11.13) and that the
 package code is the checked-out commit. The same commit must be used on both clusters:
@@ -450,7 +455,7 @@ is needed. From the repo root:
 pip install pytest
 python -m pytest -m "not slow"     # everything except the VQE runs, about 3 minutes
 python -m pytest -m slow           # 5 end-to-end VQE runs, about 4 minutes
-python -m pytest                   # all 677 tests
+python -m pytest                   # all 682 tests
 ```
 
 | File | What it checks |

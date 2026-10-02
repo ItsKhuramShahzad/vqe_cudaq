@@ -12,7 +12,7 @@ import numpy as np
 import openfermion
 import openfermionpyscf
 from openfermion.transforms import jordan_wigner, get_fermion_operator
-from pyscf import cc, mcscf
+from pyscf import mcscf
 import cudaq
 
 from . import config
@@ -25,8 +25,8 @@ from .operators import (
     slice_ccsd_to_active,
     build_theta0_and_labels_standard,
 )
-from .ansatz import hea_num_parameters, energy_expectation, final_state_diagnostics
-from .hamiltonian import IntegralFiles, SpaceDoesNotFit, qubit_hamiltonian
+from .ansatz import energy_expectation, final_state_diagnostics
+from .hamiltonian import IntegralFiles, SpaceDoesNotFit, qubit_hamiltonian, run_ccsd
 from .vqe import best_of_jitters_one_chunk, vqe_until_converged
 from .xyz import geometry_in_angstrom
 
@@ -36,8 +36,12 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
 
     integrals_dir: read the active-space Hamiltonian, E_HF, E_CCSD, E_CASCI and the
     CCSD amplitudes from saved integral files under this folder instead of running
-    PySCF (closed-shell only). Missing files are computed and saved there. Without
-    it, the geometry route (SCF + CCSD + CASCI here) is used, unchanged.
+    PySCF. Missing files are computed and saved there. Without it, the geometry
+    route (SCF + CCSD + CASCI here) is used.
+
+    Closed-shell molecules only. Every active space starts from the CCSD amplitudes
+    (corrected packer); if they cannot be obtained or packed, the run stops with an
+    error, it never starts from zeros or random parameters.
     """
     # ── snapshot run configuration ────────────────────────────────────
     BASIS = config.BASIS
@@ -46,7 +50,6 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
     TARGET_PRECISION = config.TARGET_PRECISION
     OPTIMIZER = config.OPTIMIZER
     SEED = config.SEED
-    RUN_CCSD_REFERENCE = config.RUN_CCSD_REFERENCE
     JW_IMAG_TOL = config.JW_IMAG_TOL
     THETA_SCALE = config.THETA_SCALE
     HEAVY_PARAM_THRESHOLD = config.HEAVY_PARAM_THRESHOLD
@@ -73,12 +76,15 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
 
     active_spaces = spec["valid_active_spaces"]
 
+    # Closed shell only: the UCCSD start needs restricted CCSD amplitudes.
+    if multiplicity != 1:
+        raise ValueError(f"{mol_name}: multiplicity {multiplicity}; only closed-shell "
+                         f"molecules are supported")
+
     files = None
     molecule = mf = None
     if integrals_dir is not None:
         # Integral-file mode: no SCF/CCSD here, everything comes from the files.
-        if multiplicity != 1:
-            raise ValueError(f"{mol_name}: integral files are closed-shell only")
         from .molecules import molecules as MOLECULES
         files = IntegralFiles(integrals_dir, mol_name, spec, BASIS, max_memory=MAX_MEMORY,
                               all_spaces=MOLECULES.get(mol_name, spec)["valid_active_spaces"])
@@ -98,7 +104,6 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         nocc = nelec // 2
         nvir = nmo - nocc
         HF_FULL = float(first["e_hf"])
-        is_open_shell = False
         E_CCSD_FULL = float(first["e_ccsd"])
         ccsd_block = {"computed": True, "E_ccsd_total": E_CCSD_FULL,
                       "E_ccsd_corr": float(E_CCSD_FULL - HF_FULL),
@@ -117,11 +122,9 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         t1 = time.time()
 
         mf = molecule._pyscf_data["scf"]
+        if not mf.converged:
+            raise RuntimeError(f"{mol_name}: SCF did not converge")
         pyscf_info = collect_pyscf_insights(mf, molecule)
-
-        # ── CHANGE 1: open-shell skip block REMOVED ───────────────────────
-        # Previously returned skipped dict here if mf.mol.spin != 0
-        # Now open-shell molecules continue and run normally
 
         nmo = mf.mo_coeff.shape[1]
         nelec = int(mf.mol.nelectron)
@@ -129,34 +132,18 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         nvir = nmo - nocc
 
         HF_FULL = float(molecule.hf_energy)
-        is_open_shell = int(mf.mol.spin) != 0
 
-        ccsd_block = {"computed": False, "E_ccsd_total": None, "E_ccsd_corr": None,
-                      "t1_norm": None, "t2_norm": None, "note": None}
-        t1amp = None
-        t2amp = None
-        E_CCSD_FULL = None
-
-        if RUN_CCSD_REFERENCE:
-            try:
-                if not is_open_shell:
-                    # Closed-shell: original unchanged
-                    mycc = cc.CCSD(mf)
-                else:
-                    # Open-shell: UCCSD instead
-                    mycc = cc.UCCSD(mf)
-                ecc_corr, t1amp, t2amp = mycc.kernel()
-                E_CCSD_FULL = float(mf.e_tot + ecc_corr)
-                ccsd_block.update({
-                    "computed": True,
-                    "E_ccsd_total": float(E_CCSD_FULL),
-                    "E_ccsd_corr": float(ecc_corr),
-                    "t1_norm": float(np.linalg.norm(np.asarray(t1amp))),
-                    "t2_norm": float(np.linalg.norm(np.asarray(t2amp))),
-                    "note": "CCSD full-system amplitudes used for theta0 slicing.",
-                })
-            except Exception as e:
-                ccsd_block.update({"computed": False, "note": f"CCSD failed: {repr(e)}"})
+        # Full-system CCSD: its amplitudes are the VQE starting point, so it must succeed
+        # and converge (run_ccsd raises otherwise).
+        E_CCSD_FULL, t1amp, t2amp = run_ccsd(mf, max_memory=MAX_MEMORY)
+        ccsd_block = {
+            "computed": True,
+            "E_ccsd_total": float(E_CCSD_FULL),
+            "E_ccsd_corr": float(E_CCSD_FULL - HF_FULL),
+            "t1_norm": float(np.linalg.norm(np.asarray(t1amp))),
+            "t2_norm": float(np.linalg.norm(np.asarray(t2amp))),
+            "note": "CCSD full-system amplitudes used for theta0 slicing.",
+        }
 
     # cudaq.set_target(TARGET)
     cudaq_precision = configure_cudaq_target()
@@ -245,67 +232,36 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         c0, qubit_ham_nc = split_constant(qubit_ham)
         spin_nc = cudaq.SpinOperator(qubit_ham_nc)
 
-        # Open-shell odd: use HEA parameter count (3 * qubit_count)
-        # Open-shell even or closed-shell: use uccsd_num_parameters
-        if is_open_shell and (nele_cas % 2 != 0):
-            expected = hea_num_parameters(qubit_count)
-        else:
-            expected = int(cudaq.kernels.uccsd_num_parameters(nele_cas, qubit_count))
+        expected = int(cudaq.kernels.uccsd_num_parameters(nele_cas, qubit_count))
 
-        if not is_open_shell:
-            # Closed-shell: CCSD-sliced theta0 using the CORRECTED packer
-            # (CUDA-Q block order + factor of 2 on doubles).
-            labels0 = None
-            if data is not None:
-                # the stored active-space amplitudes, same corrected packer
-                theta0, labels0, expected_check = build_theta0_and_labels_standard(
-                    data["t1_active"], data["t2_active"], nele_cas=nele_cas,
-                    norb_cas=norb_cas, scale=THETA_SCALE)
-                if expected_check != expected or any(l == ("PAD",) for l in labels0):
-                    raise RuntimeError(f"{mol_name} ({nele_cas},{norb_cas}): the packer had to "
-                                       f"pad or cut theta0 to {expected} parameters")
-                theta0_source = "CCSD-sliced (corrected packer, x2 doubles, from integral file)"
-            elif (t1amp is not None) and (t2amp is not None):
-                _, _, t1_act, t2_act = slice_ccsd_to_active(
-                    t1amp, t2amp, nocc=nocc, nmo=nmo, active_orbs=act)
-                theta0, labels0, expected_check = build_theta0_and_labels_standard(
-                    t1_act, t2_act, nele_cas=nele_cas, norb_cas=norb_cas,
-                    scale=THETA_SCALE)
-                if expected_check != expected:
-                    theta0 = np.zeros(expected, dtype=float)
-                    theta0_source = "zeros (ccsd-pack-mismatch)"
-                else:
-                    theta0_source = "CCSD-sliced (corrected packer, x2 doubles)"
-            else:
-                theta0 = np.zeros(expected, dtype=float)
-                theta0_source = "zeros (CCSD unavailable/off)"
+        # theta0 from the CCSD amplitudes only, with the corrected packer (CUDA-Q block
+        # order, x2 on doubles). The packer raises if the amplitudes do not give exactly
+        # `expected` parameters; there is no zero or random start.
+        if data is not None:
+            t1_act, t2_act = data["t1_active"], data["t2_active"]      # stored in the file
+            theta0_source = "CCSD-sliced (corrected packer, x2 doubles, from integral file)"
         else:
-            # ── FIX 2: open-shell theta0 — seeded via local_rng ──────────
-            # Old code:  np.random.uniform(-0.1, 0.1, expected)
-            #   → unseeded, CPU and GPU draw different arrays → different
-            #     local minima, meaningless speedup comparison.
-            # New code:  local_rng.uniform(-0.1, 0.1, expected)
-            #   → deterministic from (SEED, mol_name, ncore, nele_cas, norb_cas)
-            #   → CPU and GPU start from IDENTICAL theta0
-            #   → range kept at original (-0.1, 0.1) — only seed is fixed
-            theta0 = local_rng.uniform(-0.1, 0.1, expected)
-            theta0_source = f"seeded_uniform seed={SEED}"
-            # ──────────────────────────────────────────────────────────────
+            _, _, t1_act, t2_act = slice_ccsd_to_active(
+                t1amp, t2amp, nocc=nocc, nmo=nmo, active_orbs=act)
+            theta0_source = "CCSD-sliced (corrected packer, x2 doubles)"
+        theta0, labels0, expected_check = build_theta0_and_labels_standard(
+            t1_act, t2_act, nele_cas=nele_cas, norb_cas=norb_cas, scale=THETA_SCALE)
 
-        # Guard: closed-shell runs must use the corrected CCSD packer at full scale
-        if not is_open_shell:
-            if not theta0_source.startswith("CCSD-sliced (corrected packer"):
-                raise RuntimeError(f"{mol_name} ({nele_cas},{norb_cas}): theta0 source is "
-                                   f"'{theta0_source}'")
-            if THETA_SCALE != 1.0:
-                raise RuntimeError(f"THETA_SCALE must be 1.0, got {THETA_SCALE}")
+        # Last check: corrected CCSD packer at full scale, right parameter count
+        if expected_check != expected or len(theta0) != expected:
+            raise RuntimeError(f"{mol_name} ({nele_cas},{norb_cas}): theta0 has "
+                               f"{len(theta0)} parameters, the kernel expects {expected}")
+        if not theta0_source.startswith("CCSD-sliced (corrected packer"):
+            raise RuntimeError(f"{mol_name} ({nele_cas},{norb_cas}): theta0 source is "
+                               f"'{theta0_source}'")
+        if THETA_SCALE != 1.0:
+            raise RuntimeError(f"THETA_SCALE must be 1.0, got {THETA_SCALE}")
 
         # Energy of the circuit at theta = 0 (reference) and at theta0 (start),
         # before any optimisation or seed search
         E_ref_start_nc = energy_expectation(spin_nc, qubit_count, nele_cas,
-                                            np.zeros(expected), open_shell=is_open_shell)
-        E_theta0_nc = energy_expectation(spin_nc, qubit_count, nele_cas,
-                                         theta0, open_shell=is_open_shell)
+                                            np.zeros(expected))
+        E_theta0_nc = energy_expectation(spin_nc, qubit_count, nele_cas, theta0)
 
         is_heavy = expected > HEAVY_PARAM_THRESHOLD
         local_restarts = N_JITTER_RESTARTS if not is_heavy else HEAVY_RESTARTS
@@ -321,7 +277,6 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
                 jitter_scale=JITTER_SCALE,
                 chunk_maxiter=VQE_CHUNK_MAXITER,
                 method=OPTIMIZER, tol=TOL, rhobeg=local_rhobeg,
-                open_shell=is_open_shell
             )
             theta_seed       = seed_out["theta_opt"]
             best_init_index  = int(seed_out["best_init_index"])
@@ -343,7 +298,6 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
             jitter_scale=VQE_JITTER_BETWEEN_SCALE,
             method=OPTIMIZER, tol=TOL, rhobeg=local_rhobeg,
             verbose_cycles=PRINT_EVERY_CYCLE,
-            open_shell=is_open_shell
         )
         vqe_out["best_init_index"] = best_init_index
 
@@ -352,15 +306,13 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         # Final state, <S^2> and fidelity with the exact ground state, after the timed
         # VQE and with the same CUDA-Q version. A failure here is recorded, not raised,
         # so it can never cost the VQE result.
-        final_state = None
-        if not is_open_shell:
-            t_fs = time.perf_counter()
-            try:
-                final_state = final_state_diagnostics(qubit_ham, vqe_out["theta_opt"],
-                                                      qubit_count, nele_cas, E_VQE)
-            except Exception as e:
-                final_state = {"error": repr(e)}
-            final_state["seconds"] = float(time.perf_counter() - t_fs)
+        t_fs = time.perf_counter()
+        try:
+            final_state = final_state_diagnostics(qubit_ham, vqe_out["theta_opt"],
+                                                  qubit_count, nele_cas, E_VQE)
+        except Exception as e:
+            final_state = {"error": repr(e)}
+        final_state["seconds"] = float(time.perf_counter() - t_fs)
 
         d_vqe_casci    = float(E_VQE - E_CASCI)
         d_vqe_hf_full  = float(E_VQE - HF_FULL)
