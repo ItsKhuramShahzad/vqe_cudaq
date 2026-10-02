@@ -42,7 +42,9 @@ def run_metadata() -> dict:
     """Software versions, machine, SLURM job and a hash of the package code.
 
     Stored in every result PKL so CPU and GPU runs can be checked to use the same
-    code and environment. ``script_sha256`` hashes all ``vqe_cudaq/*.py`` files.
+    code and environment. ``script_sha256`` hashes all ``vqe_cudaq/*.py`` files;
+    ``git_commit`` is the repository commit and ``git_dirty`` is True if the package
+    code differed from it (both None outside a git checkout).
     """
     import os
     import glob
@@ -80,6 +82,18 @@ def run_metadata() -> dict:
         "script_name": "vqe_cudaq",
         "script_sha256": code.hexdigest(),
     }
+    # git commit of the repository and whether the package code had uncommitted changes
+    repo = os.path.dirname(pkg_dir)
+    try:
+        def git(*args):
+            return subprocess.run(["git", "-C", repo, *args], capture_output=True,
+                                  text=True, timeout=10).stdout.strip()
+        meta["git_commit"] = git("rev-parse", "HEAD") or None
+        meta["git_dirty"] = (bool(git("status", "--porcelain", "--", "vqe_cudaq"))
+                             if meta["git_commit"] else None)
+    except Exception:
+        meta["git_commit"] = meta["git_dirty"] = None
+
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"],

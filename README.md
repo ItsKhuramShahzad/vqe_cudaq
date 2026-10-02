@@ -128,7 +128,10 @@ vqe_cudaq/
 │   ├── scatter_interactive.py# interactive hover plots (Plotly HTML)
 │   └── latex_report.py       # full PGFPlots/LaTeX figure report -> tex_out/
 ├── scripts/
-│   └── dump_integrals.py     # writes the integral files from the geometries
+│   ├── dump_integrals.py     # writes the integral files from the geometries
+│   ├── run_cpu_final.sh      # SLURM array for the final benchmark, CPU node
+│   ├── run_gpu_final.sh      # SLURM array for the final benchmark, GPU node
+│   └── final_run_common.sh   # shared part: version and commit checks, molecule list
 ├── tests/                    # pytest suite, runs on a CPU (see "Tests" below)
 ├── notebooks/
 │   └── Molecular_Orbital_Visualization.ipynb
@@ -347,9 +350,12 @@ smaller basis and are skipped (for example 4 of the 9 for NH<sub>2</sub><sup>&mi
 its own `--out_dir`. For every active space the PKL holds the HF, CCSD, CASCI and final
 VQE energies, the circuit energy at the CCSD starting point (`theta0.E_theta0_total`) and
 at theta = 0 (`theta0.E_ref_total`, equal to E_HF), the convergence trace, the timings
-and the run metadata (package versions, host, SLURM job, GPU, hash of the `vqe_cudaq`
-code). A successful run reaches the CASCI energy of each active space (see
-`compare.d_vqe_minus_casci`).
+(main VQE in `vqe.runtime`, seed search in `vqe.seed_search_runtime`) and the run
+metadata (package versions, host, SLURM job, GPU, git commit, hash of the `vqe_cudaq`
+code). `final_state` holds the final VQE state vector (`psi`, CUDA-Q qubit order), its
+spin `S2`, the exact ground-state energy of the active space (`E_exact`) and the
+`fidelity` of the VQE state with the exact ground state. A successful run reaches the
+CASCI energy of each active space (see `compare.d_vqe_minus_casci`).
 
 If a file is missing (for instance for a new molecule), it is computed with PySCF and
 saved in `integrals/` on the fly; `--max-memory` sets the PySCF memory limit in MB.
@@ -386,6 +392,26 @@ Defaults live in `vqe_cudaq/config.py` and can be overridden on the CLI (`--basi
 Every run uses the same settings on CPU and GPU: fp64 is enforced (a run that is not
 fp64 stops), and closed-shell runs must start from the CCSD amplitudes with the corrected
 CUDA-Q packing.
+
+### Final benchmark on the clusters
+
+`scripts/run_cpu_final.sh` and `scripts/run_gpu_final.sh` run the 12 molecules as a SLURM
+array (one molecule per task) from the integral files, with identical settings, into
+`results/final_2026/cpu` and `results/final_2026/gpu`. Before starting, each task
+checks that the environment has exactly the benchmark versions (CUDA-Q 0.11.0, PySCF
+2.6.2, SciPy 1.16.0, NumPy 1.26.4, OpenFermion 1.6.1, Python 3.11.13) and that the
+package code is the checked-out commit. The same commit must be used on both clusters:
+the UCCSD kernel can give a different state for the same parameters in another CUDA-Q
+version.
+
+```bash
+git pull                                              # same commit on both clusters
+SPACE_IDX=7 sbatch --array=3 scripts/run_cpu_final.sh # short test: Benzene (2,3)
+sbatch scripts/run_cpu_final.sh                       # all 12 molecules
+```
+
+Run the scripts from the repository root, without installing the package into the
+environment (`python -m vqe_cudaq.cli` needs no install).
 
 ---
 
@@ -424,7 +450,7 @@ is needed. From the repo root:
 pip install pytest
 python -m pytest -m "not slow"     # everything except the VQE runs, about 3 minutes
 python -m pytest -m slow           # 5 end-to-end VQE runs, about 4 minutes
-python -m pytest                   # all 671 tests
+python -m pytest                   # all 677 tests
 ```
 
 | File | What it checks |
@@ -432,9 +458,9 @@ python -m pytest                   # all 671 tests
 | `test_molecules.py` | the 12 molecules, their 9 active spaces, electron and orbital counts, XYZ files and pictures |
 | `test_integrals.py` | all 320 integral files load, match their names, reproduce CASCI; missing files are made and reused; `dump_integrals.py` rewrites the same files |
 | `test_hamiltonian.py` | qubit Hamiltonian is real and Hermitian, its ground state is CASCI, the circuit at θ = 0 gives E_HF |
-| `test_ansatz.py` | UCCSD parameter counts, Hartree–Fock filling, rotation angle of each parameter |
+| `test_ansatz.py` | UCCSD parameter counts, Hartree–Fock filling, rotation angle of each parameter, final-state diagnostics (CPU and GPU) |
 | `test_theta0.py` | CCSD → θ₀ packing (order, values, count), θ₀ energy between CASCI and HF, reproduces a published run |
-| `test_backend.py` | CUDA-Q version check, fp64 enforcement, run metadata, machine-independent seeds |
+| `test_backend.py` | CUDA-Q version check, fp64 enforcement, run metadata (including the git commit), machine-independent seeds |
 | `test_results.py` | reference PKLs: corrected packer, VQE within 1.6 mHa of CASCI, energies match the integral files, CPU and GPU agree |
 | `test_analysis.py` | analysis scripts read `results/`, keep the molecule order, and write the tables and LaTeX report |
 | `test_driver.py` (slow) | full runs from integral files, from the geometry and from the CLI reach CASCI |

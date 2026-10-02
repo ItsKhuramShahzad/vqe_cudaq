@@ -77,6 +77,18 @@ def test_run_records_reference_seed_and_provenance(ethylene_from_files):
     assert "fp64" in str(res["cudaq_precision"]).lower()
     assert res["run_metadata"]["script_name"] == "vqe_cudaq"
     assert res["integrals"]["files_made"] == []                        # nothing recomputed
+    assert res["run_metadata"]["git_commit"] is not None
+    assert run["vqe"]["seed_search_runtime"] >= 0.0
+
+
+def test_run_records_the_final_state(ethylene_from_files):
+    run, = ethylene_from_files["active_space_runs"]
+    fs = run["final_state"]
+    assert "error" not in fs, fs.get("error")
+    assert fs["psi"].shape == (2 ** 6,)
+    assert abs(fs["E_check"] - run["vqe"]["E_total"]) < 1e-9
+    assert abs(fs["E_exact"] - run["casci"]["E_casci_total"]) < 1e-9
+    assert fs["fidelity"] > 1 - 1e-6 and abs(fs["S2"]) < 1e-8
 
 
 def test_geometry_route_gives_the_same_run(cpu_config, ethylene_from_files):

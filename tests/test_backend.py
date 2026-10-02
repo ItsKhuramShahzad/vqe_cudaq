@@ -44,6 +44,8 @@ def test_run_metadata():
         pyscf.__version__, scipy.__version__, numpy.__version__)
     assert len(meta["script_sha256"]) == 64
     assert run_metadata()["script_sha256"] == meta["script_sha256"]
+    # this repository is a git checkout: the commit is recorded
+    assert len(meta["git_commit"]) == 40 and isinstance(meta["git_dirty"], bool)
 
 
 def test_seeds_are_the_same_on_every_machine():

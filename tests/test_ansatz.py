@@ -96,3 +96,67 @@ def test_energy_expectation_picks_the_kernel_by_shell():
     # UCCSD at theta = 0: qubit 0 occupied, <Z0> = -1
     n = cudaq.kernels.uccsd_num_parameters(4, 6)
     assert abs(energy_expectation(z0, 6, 4, np.zeros(n)) + 1.0) < 1e-12
+
+
+# ── final_state_diagnostics ─────────────────────────────────────────────
+
+def published_theta(nele, norb):
+    """theta_opt of the published Ethylene CPU run for one space (reproduced on every
+    CUDA-Q version checked for these small spaces)."""
+    import glob, os, pickle
+    from conftest import RESULTS
+    path, = glob.glob(os.path.join(RESULTS, "cpu", "*_Ethylene_*.pkl"))
+    with open(path, "rb") as fh:
+        res = pickle.load(fh)["Ethylene"]
+    run, = [r for r in res["active_space_runs"]
+            if (r["space"]["nele_cas"], r["space"]["norb_cas"]) == (nele, norb)]
+    return run["vqe"]["theta_opt"]
+
+
+def diagnostics(d, theta):
+    from vqe_cudaq.ansatz import final_state_diagnostics
+    from vqe_cudaq.hamiltonian import qubit_hamiltonian
+    from vqe_cudaq.operators import make_qubitop_real
+    c0, ham = spin_hamiltonian(d)
+    nq, ne = 2 * d["norb_cas"], d["nele_cas"]
+    e = c0 + energy_expectation(ham, nq, ne, theta)
+    return e, final_state_diagnostics(make_qubitop_real(qubit_hamiltonian(d)), theta, nq, ne, e)
+
+
+def test_final_state_at_theta_zero_is_hartree_fock(ethylene_43):
+    n = cudaq.kernels.uccsd_num_parameters(4, 6)
+    e, out = diagnostics(ethylene_43, np.zeros(n))
+    assert abs(out["E_check"] - ethylene_43["e_hf"]) < 1e-9
+    assert abs(out["E_exact"] - ethylene_43["e_casci"]) < 1e-9
+    assert abs(out["S2"]) < 1e-10 and abs(out["weight_in_N_sector"] - 1) < 1e-12
+    assert 0.5 < out["fidelity"] < 0.9999          # HF is not the exact ground state
+    assert out["ground_degeneracy"] == 1 and abs(out["S2_exact"]) < 1e-8
+    psi = out["psi"]
+    assert abs(abs(psi[0b001111]) - 1) < 1e-12    # CUDA-Q order: qubits 0-3 filled
+
+
+@pytest.mark.parametrize("nele, norb, ncore", [(4, 3, 6), (2, 4, 7), (6, 4, 5)])
+def test_final_state_of_a_converged_run(nele, norb, ncore):
+    """The published Ethylene runs reached CASCI: fidelity 1, singlet, E_check = E_VQE."""
+    d = load("cc-pVDZ", "Ethylene", ncore, nele, norb)
+    e, out = diagnostics(d, published_theta(nele, norb))
+    assert abs(out["E_check_minus_E_vqe"]) < 1e-9     # the qubit reordering is right
+    assert abs(out["E_exact"] - d["e_casci"]) < 1e-9
+    assert out["fidelity"] > 1 - 1e-7
+    assert abs(out["S2"]) < 1e-8
+
+
+def test_final_state_is_the_same_on_the_gpu(ethylene_43):
+    """nvidia fp64 gives the same state as qpp-cpu (skipped without a GPU)."""
+    theta = published_theta(4, 3)
+    _, cpu = diagnostics(ethylene_43, theta)
+    try:
+        cudaq.set_target("nvidia", option="fp64")
+    except Exception:
+        pytest.skip("no nvidia target")
+    try:
+        _, gpu = diagnostics(ethylene_43, theta)
+    finally:
+        cudaq.set_target("qpp-cpu")
+    assert np.allclose(gpu["psi"], cpu["psi"], atol=1e-10)
+    assert abs(gpu["fidelity"] - cpu["fidelity"]) < 1e-10

@@ -25,7 +25,7 @@ from .operators import (
     slice_ccsd_to_active,
     build_theta0_and_labels_standard,
 )
-from .ansatz import hea_num_parameters, energy_expectation
+from .ansatz import hea_num_parameters, energy_expectation, final_state_diagnostics
 from .hamiltonian import IntegralFiles, SpaceDoesNotFit, qubit_hamiltonian
 from .vqe import best_of_jitters_one_chunk, vqe_until_converged
 from .xyz import geometry_in_angstrom
@@ -311,6 +311,7 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         local_restarts = N_JITTER_RESTARTS if not is_heavy else HEAVY_RESTARTS
         local_rhobeg   = COBYLA_RHOBEG     if not is_heavy else HEAVY_RHOBEG
 
+        t_seed0 = time.perf_counter()   # seed search timed on its own (all candidates)
         if local_restarts > 0:
             seed_out = best_of_jitters_one_chunk(
                 spin_nc, qubit_count, nele_cas,
@@ -328,6 +329,7 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
             seed_out        = None
             theta_seed      = theta0.copy()
             best_init_index = -1
+        seed_search_runtime = time.perf_counter() - t_seed0     # 0 when the seed search is skipped
 
         vqe_out = vqe_until_converged(
             spin_nc, qubit_count, nele_cas,
@@ -346,6 +348,19 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         vqe_out["best_init_index"] = best_init_index
 
         E_VQE = float(c0 + vqe_out["E_nc_opt"])
+
+        # Final state, <S^2> and fidelity with the exact ground state, after the timed
+        # VQE and with the same CUDA-Q version. A failure here is recorded, not raised,
+        # so it can never cost the VQE result.
+        final_state = None
+        if not is_open_shell:
+            t_fs = time.perf_counter()
+            try:
+                final_state = final_state_diagnostics(qubit_ham, vqe_out["theta_opt"],
+                                                      qubit_count, nele_cas, E_VQE)
+            except Exception as e:
+                final_state = {"error": repr(e)}
+            final_state["seconds"] = float(time.perf_counter() - t_fs)
 
         d_vqe_casci    = float(E_VQE - E_CASCI)
         d_vqe_hf_full  = float(E_VQE - HF_FULL)
@@ -385,6 +400,7 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
                 "runtime": float(vqe_out["runtime_total"]),
                 "simulated_quantum_runtime": float(vqe_out["runtime_quantum_sum"]),
                 "optimizer_runtime": float(vqe_out["runtime_optimizer"]),
+                "seed_search_runtime": float(seed_search_runtime),
                 "quantum_times": list(vqe_out["quantum_times"]),
                 "energy_convergence": list(vqe_out["energy_convergence"]),
                 "best_energy_per_cycle": list(vqe_out["best_energy_per_cycle"]),
@@ -395,6 +411,7 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
                 "nit_total": int(vqe_out["nit"]),
                 "nfev_total": int(vqe_out["nfev"]),
             },
+            "final_state": final_state,
             "compare": {
                 "d_vqe_minus_casci": d_vqe_casci,
                 "d_vqe_minus_hf_full": d_vqe_hf_full,
