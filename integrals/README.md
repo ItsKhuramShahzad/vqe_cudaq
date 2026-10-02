@@ -160,3 +160,5 @@ checked when it was written: the CASCI energy rebuilt from the saved `h1`, `eri`
 - VQE run on MIMIQ and on CUDA-Q from a file alone reaches the stored CASCI energy.
 - The files with amplitudes were regenerated on a different machine; their integrals and
   energies equal the earlier files without amplitudes to 4e-12 Ha.
+- `tests/test_integrals.py` repeats these checks on every file
+  (`python -m pytest tests/test_integrals.py`).
