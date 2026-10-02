@@ -37,7 +37,8 @@ def test_run_metadata():
     import numpy, pyscf, scipy
     meta = run_metadata()
     for key in ("python", "cudaq", "pyscf", "scipy", "numpy", "openfermion", "hostname",
-                "slurm_job_id", "omp_num_threads", "os_cpu_count", "script_sha256", "gpu"):
+                "cpu_model", "slurm_job_id", "omp_num_threads", "os_cpu_count",
+                "script_sha256", "gpu"):
         assert key in meta, key
     assert meta["cudaq"] == cudaq.__version__
     assert (meta["pyscf"], meta["scipy"], meta["numpy"]) == (

@@ -64,6 +64,16 @@ def run_metadata() -> dict:
             code.update(os.path.basename(path).encode())
             code.update(fh.read())
 
+    cpu_model = None
+    try:
+        with open("/proc/cpuinfo") as fh:
+            for line in fh:
+                if line.startswith("model name"):
+                    cpu_model = line.split(":", 1)[1].strip()
+                    break
+    except OSError:
+        pass
+
     meta = {
         "python": platform.python_version(),
         "cudaq": cudaq.__version__,
@@ -72,6 +82,7 @@ def run_metadata() -> dict:
         "numpy": np.__version__,
         "openfermion": openfermion.__version__,
         "hostname": socket.gethostname(),
+        "cpu_model": cpu_model,
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "slurm_array_job_id": os.environ.get("SLURM_ARRAY_JOB_ID"),
         "slurm_array_task_id": os.environ.get("SLURM_ARRAY_TASK_ID"),

@@ -401,7 +401,7 @@ packed, the run stops with an error.
 array (one molecule per task, its 9 active spaces one after another, one PKL per
 molecule) from the integral files, with identical settings, into
 `results/final_2026/cpu` and `results/final_2026/gpu`; SLURM logs go to `logs/`. A CPU task
-uses 2 cores and 8 GB, a GPU task one GPU, 1 core and 16 GB (the largest active space,
+uses 1 core and 8 GB, a GPU task one GPU, 1 core and 16 GB (the largest active space,
 14 qubits, needs 4.4 GB including the final-state analysis). Before starting, each task
 checks that the environment has exactly the benchmark versions (CUDA-Q 0.11.0, PySCF
 2.6.2, SciPy 1.16.0, NumPy 1.26.4, OpenFermion 1.6.1, Python 3.11.13) and that the
