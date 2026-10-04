@@ -46,7 +46,8 @@ orbital counts against PySCF.
 
 ## 2. The electronic structure problem
 
-The electronic Schrödinger equation (paper Eq. `eq:schrodinger`),
+The electronic Schrödinger equation and the electronic Hamiltonian (paper Eqs. `eq:schrodinger`
+and `eq:el_ham_1q`),
 
 ```math
 \hat{H}_\mathrm{el}\,|\Psi\rangle = E\,|\Psi\rangle ,
@@ -64,7 +65,7 @@ constant (Eq. `eq:mol_ham_1q_w_ions`). In second quantization (Eq. `eq:fermion_h
 
 with the sums over spin orbitals. The code stores the two-electron integrals over spatial
 orbitals in chemists' notation, $`(pq|rs) = \int \phi_p^*(1)\phi_q(1) r_{12}^{-1} \phi_r^*(2)\phi_s(2)`$,
-for which the same operator reads
+which vanish unless orbitals $`p,q`$ and $`r,s`$ have the same spin; with them the same operator reads
 
 ```math
 \hat{H}_\mathrm{el} = \sum_{pq} h_{pq}\,\hat{a}^\dagger_p \hat{a}_q
@@ -155,8 +156,8 @@ N_o^{(v)} \ge 1 ,
 ```
 
 stopping after $`N_{ac}^{(\text{max. configs})}`$ configurations (Eq.
-`equation:ActiveSpaceGeneration`). The orbital energies around the active space (SI figure
-of the active orbitals) can be inspected with `vqe_cudaq/orbitals.py`
+`equation:ActiveSpaceGeneration`). The orbital energies around the active space (paper Figure
+`fig:active_orbitals`) can be inspected with `vqe_cudaq/orbitals.py`
 (`python -m vqe_cudaq.cli --export-mos`).
 
 ## 5. Jordan–Wigner transformation
@@ -248,13 +249,13 @@ kernel, $`[S_\alpha, S_\beta, D_{\alpha\beta}, D_{\alpha\alpha}, D_{\beta\beta}]
 
 with $`s = 1`$ (SI: $`\theta_{0,k} = s\cdot t_k^\mathrm{CCSD,active}`$). The factor 2 on the doubles
 compensates the half angle of the kernel, so that each double excitation starts at its CCSD
-amplitude; the same-spin blocks are antisymmetrized. Every run starts from these amplitudes:
+amplitude; the singles are packed without this factor. The same-spin blocks are antisymmetrized. Every run starts from these amplitudes:
 if they cannot be computed (CCSD fails or does not converge) or do not give exactly $`N_\theta`$
 parameters, the run stops; no run starts from zero or random parameters. Only closed-shell
 molecules are accepted.
 
-**Stage 1: seed search** (SI Eq. `eq:param_update`). Besides
-$`\boldsymbol{\theta}_0^{(0)} = \boldsymbol{\theta}_0`$, $`K = 3`$ candidates
+**Stage 1: seed search** (SI Eq. `eq:param_update`). Besides the unperturbed vector
+$`\boldsymbol{\theta}_0^{(0)} = \boldsymbol{\theta}_0`$, $`K = 3`$ perturbed candidates
 
 ```math
 \boldsymbol{\theta}_0^{(r)} = \boldsymbol{\theta}_0 + \boldsymbol{\delta}^{(r)},\qquad
@@ -262,12 +263,13 @@ $`\boldsymbol{\theta}_0^{(0)} = \boldsymbol{\theta}_0`$, $`K = 3`$ candidates
 \sigma_\mathrm{seed} = 5\times10^{-3},\quad r = 1,\dots,K ,
 ```
 
-are each optimized for one COBYLA chunk of at most 600 energy evaluations; the lowest energy
-gives the seed (`vqe.best_of_jitters_one_chunk`). The seed search is skipped when
+are generated. All $`K+1 = 4`$ vectors are optimized for one COBYLA chunk of at most 600 energy
+evaluations each; the one reaching the lowest energy is the seed (`vqe.best_of_jitters_one_chunk`). The seed search is skipped when
 $`N_\theta > 150`$, i.e. for (6e,7o).
 
 **Stage 2: multi-cycle VQE** (SI Eq. `eq:param_jitter`). In cycle $`c`$, COBYLA runs one chunk of
-at most 600 evaluations, starting for $`c \ge 2`$ from
+at most 600 evaluations. The first cycle starts from the seed; for $`c \ge 2`$ the start is the best
+parameter vector found so far, $`\boldsymbol{\theta}_\mathrm{opt}^{(c-1)}`$, plus a smaller perturbation,
 
 ```math
 \boldsymbol{\theta}_\mathrm{start}^{(c)} = \boldsymbol{\theta}_\mathrm{opt}^{(c-1)} + \boldsymbol{\epsilon}^{(c)},\qquad
@@ -350,7 +352,8 @@ flowchart TB
 ```
 
 `vqe.runtime` = `simulated_quantum_runtime` (sum of `quantum_times`) + `optimizer_runtime`. The
-time per energy evaluation, `quantum_times`, is the quantity compared between CPU and GPU.
+total runtime depends on the number of energy evaluations, which varies with the optimizer path;
+the time per energy evaluation (`quantum_times`) does not, and both are stored.
 
 ## 10. Programmability
 
