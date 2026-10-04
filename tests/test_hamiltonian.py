@@ -55,16 +55,19 @@ def test_circuit_at_theta_zero_gives_the_hartree_fock_energy(case):
     assert abs(c0 + energy_expectation(ham, nq, ne, np.zeros(n)) - d["e_hf"]) < 1e-9
 
 
-def test_molecular_hamiltonian_function_matches_the_file(ethylene_43):
-    """The package's older geometry helper molecularHamiltonian() gives the same
-    Hamiltonian and E_HF as the integral file."""
-    from vqe_cudaq.hamiltonian import molecularHamiltonian
+def test_file_hamiltonian_equals_the_geometry_route(ethylene_43):
+    """The Hamiltonian built from the integral file equals the one the driver builds from
+    the geometry with OpenFermion-PySCF (get_molecular_hamiltonian), and E_HF agrees."""
+    import openfermion
+    import openfermionpyscf
+    from openfermion.transforms import get_fermion_operator, jordan_wigner
     from vqe_cudaq.molecules import molecules
     from vqe_cudaq.xyz import geometry_in_angstrom
     spec = molecules["Ethylene"]
-    _, qop, _, nq, norb, nele, e_hf, _ = molecularHamiltonian(
-        geometry_in_angstrom(spec), "cc-pVDZ", 1, 0, ncore=6, nele_cas=4, norb_cas=3)
-    assert (nq, norb, nele) == (6, int(spec["Total Spatial Orbitals"]), int(spec["Total Electrons"]))
-    assert abs(e_hf - ethylene_43["e_hf"]) < 1e-9
-    diff = qop - qubit_hamiltonian(ethylene_43)
+    mol = openfermionpyscf.run_pyscf(openfermion.MolecularData(
+        geometry_in_angstrom(spec), "cc-pVDZ", 1, 0), run_scf=True)
+    ref = jordan_wigner(get_fermion_operator(mol.get_molecular_hamiltonian(
+        occupied_indices=range(6), active_indices=range(6, 9))))
+    diff = ref - qubit_hamiltonian(ethylene_43)
     assert max((abs(c) for c in diff.terms.values()), default=0.0) < 1e-9
+    assert abs(float(mol.hf_energy) - ethylene_43["e_hf"]) < 1e-9

@@ -1658,7 +1658,7 @@ def fig11_energy_error_vs_ccsd(cpu, gpu, molecules, outdir):
                 vg_err_pts.append(f"({sc},{v:.10f})")
                 all_errs.append(v)
 
-        # ── FIX 1: explicit per-panel log window + fixed bar origin ──
+        # Explicit per-panel log window and fixed bar origin:
         # ymin ~= 0.3 * min(data), ymax ~= 2.5 * max(data) gives every
         # panel a comparable ~1-decade log window regardless of how tight
         # the raw data is. log origin y=-infty forces bars to always
@@ -1689,8 +1689,8 @@ def fig11_energy_error_vs_ccsd(cpu, gpu, molecules, outdir):
             + (f"\\addplot+[ybar, bar shift=+2pt, fill=red!55,  draw=red!80]"
                f"  coordinates {{{' '.join(vg_err_pts)}}};\n"
                if vg_err_pts else "")
-            # ── FIX 2: force uniform top-right label position on every
-            # panel, overriding mol_label_node's Cytosine default.
+            # Same top-right label position on every panel (overrides the
+            # Cytosine default of mol_label_node).
             + mol_label_node(mol, display(mol),
                              anchor='north east', pos='0.98,0.98')
             + "\n"

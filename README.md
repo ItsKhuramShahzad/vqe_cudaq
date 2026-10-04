@@ -483,7 +483,7 @@ is needed. From the repo root:
 pip install pytest
 python -m pytest -m "not slow"     # everything except the VQE runs, about 3 minutes
 python -m pytest -m slow           # 5 end-to-end VQE runs, about 4 minutes
-python -m pytest                   # all 682 tests
+python -m pytest                   # all 680 tests
 ```
 
 | File | What it checks |

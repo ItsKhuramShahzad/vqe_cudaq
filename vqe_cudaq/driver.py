@@ -180,15 +180,12 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         norb_cas = int(space["norb_cas"])
         qubit_count = 2 * norb_cas
 
-        # ── FIX 1: deterministic local_rng per (molecule, active_space) ──
-        # stable_hash is hashlib.sha256-based, so the seed is identical
-        # across Python sessions, machines, CPU vs GPU. Previously this used
-        # Python's built-in hash() which is randomized by PYTHONHASHSEED.
-        # rng_global is intentionally NOT used here anymore.
+        # One random generator per (molecule, active space). stable_hash is based on
+        # SHA-256, so the seed, and every perturbation drawn from it, is the same in
+        # every Python session and on every machine (CPU and GPU runs alike).
         local_rng = np.random.default_rng(
             SEED + stable_hash((mol_name, ncore, nele_cas, norb_cas))
         )
-        # ──────────────────────────────────────────────────────────────────
 
         occ = list(range(ncore))
         act = list(range(ncore, ncore + norb_cas))
@@ -272,7 +269,7 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
             seed_out = best_of_jitters_one_chunk(
                 spin_nc, qubit_count, nele_cas,
                 theta0=theta0,
-                rng=local_rng,          # ── FIX 3a: was rng_global ──────
+                rng=local_rng,
                 n_restarts=local_restarts,
                 jitter_scale=JITTER_SCALE,
                 chunk_maxiter=VQE_CHUNK_MAXITER,
@@ -289,7 +286,7 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         vqe_out = vqe_until_converged(
             spin_nc, qubit_count, nele_cas,
             theta_start=theta_seed,
-            rng=local_rng,              # ── FIX 3b: was rng_global ──────
+            rng=local_rng,
             eps_E=VQE_EPS_E,
             patience=VQE_PATIENCE,
             max_cycles=VQE_MAX_CYCLES,

@@ -7,8 +7,7 @@ import pytest
 
 import cudaq
 from conftest import load, spin_hamiltonian
-from vqe_cudaq.ansatz import (energy_expectation, hea_kernel_openshell, hea_num_parameters,
-                              uccsd_kernel_interleaved)
+from vqe_cudaq.ansatz import energy_expectation, uccsd_kernel_interleaved
 
 SPACES = [(6, 4), (6, 5), (6, 6), (6, 7), (4, 3), (4, 4), (4, 5), (2, 3), (2, 4)]
 
@@ -71,31 +70,6 @@ def test_random_parameters_keep_the_state_normalised_and_the_energy_variational(
         state = np.array(cudaq.get_state(uccsd_kernel_interleaved, 6, 4, list(theta)))
         assert abs(np.linalg.norm(state) - 1.0) < 1e-10
         assert c0 + energy_expectation(ham, 6, 4, theta) >= ethylene_43["e_casci"] - 1e-10
-
-
-def test_hea_for_odd_electron_counts():
-    """Open-shell path: 3 Ry layers (3*qubits parameters), first nele qubits filled.
-    At theta = 0 only the X filling and the two CNOT ladders act."""
-    assert hea_num_parameters(6) == 18
-    q = [1, 1, 1, 0, 0, 0]
-    for _ in range(2):
-        for i in range(5):
-            q[i + 1] ^= q[i]
-    bits = cudaq.sample(hea_kernel_openshell, 6, 3, [0.0] * 18, shots_count=100)
-    assert dict(bits.items()) == {"".join(map(str, q)): 100}
-
-
-def test_energy_expectation_picks_the_kernel_by_shell():
-    """open_shell=True with odd nele uses the HEA; otherwise UCCSD is used."""
-    z0 = cudaq.spin.z(0)
-    # HEA: X then Ry(a) on qubit 0, and the CNOTs it controls leave Z0 alone: <Z0> = -cos(a)
-    a = 0.9
-    theta = np.zeros(18)
-    theta[0] = a
-    assert abs(energy_expectation(z0, 6, 3, theta, open_shell=True) + np.cos(a)) < 1e-10
-    # UCCSD at theta = 0: qubit 0 occupied, <Z0> = -1
-    n = cudaq.kernels.uccsd_num_parameters(4, 6)
-    assert abs(energy_expectation(z0, 6, 4, np.zeros(n)) + 1.0) < 1e-12
 
 
 # ── final_state_diagnostics ─────────────────────────────────────────────

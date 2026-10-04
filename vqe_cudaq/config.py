@@ -9,7 +9,6 @@ override is seen consistently everywhere.
 """
 
 import time
-import numpy as np
 
 # ── What to run ───────────────────────────────────────────────────────
 TAG = time.strftime("%d_%b_%Y").upper()   # e.g. "23_FEB_2026"
@@ -22,22 +21,17 @@ TARGET_PRECISION = "fp64"                   # nvidia defaults to fp32; runs must
 MAX_MEMORY = 16000                          # MB, PySCF limit when a missing file is made
 
 # ── Determinism ───────────────────────────────────────────────────────
-SEED = 12345
-rng_global = np.random.default_rng(SEED)
+SEED = 12345                                # base seed of the per-space generators
 
 # ── Optimizer settings ────────────────────────────────────────────────
 TOL = 1e-10
 COBYLA_RHOBEG = 0.2
 
-# Full strength now that the CUDA-Q parameter packing is correct
-# (previously 0.3, a band-aid for a broken packer).
+# Scale s of the CCSD starting point, theta0 = s * packed amplitudes (s = 1).
 THETA_SCALE = 1.0
 
 N_JITTER_RESTARTS = 3
 JITTER_SCALE = 5e-3
-
-DIAG_MAX_PARAMS = 0
-DIAG_EPS = 1e-3
 
 # ── Multi-cycle VQE convergence ───────────────────────────────────────
 VQE_EPS_E = 1e-6

@@ -9,26 +9,18 @@ import numpy as np
 from scipy.optimize import minimize
 import cudaq
 
-from .ansatz import (
-    uccsd_kernel_interleaved,
-    hea_kernel_openshell,
-    energy_expectation,
-)
+from .ansatz import uccsd_kernel_interleaved, energy_expectation
 
 
 def optimize_vqe_one_chunk(spin_ham_nc, qubit_count, nele_cas, x0,
-                           method="COBYLA", tol=1e-10, maxiter=600, rhobeg=0.2,
-                           open_shell=False):
+                           method="COBYLA", tol=1e-10, maxiter=600, rhobeg=0.2):
     """Run one bounded optimizer chunk and return the result + timing/trace."""
     quantum_times = []
     energy_convergence = []
 
     def cost(theta):
         t0 = timeit.default_timer()
-        if open_shell and (nele_cas % 2 != 0):
-            r = cudaq.observe(hea_kernel_openshell, spin_ham_nc, qubit_count, nele_cas, theta)
-        else:
-            r = cudaq.observe(uccsd_kernel_interleaved, spin_ham_nc, qubit_count, nele_cas, theta)
+        r = cudaq.observe(uccsd_kernel_interleaved, spin_ham_nc, qubit_count, nele_cas, theta)
         quantum_times.append(timeit.default_timer() - t0)
         e = float(r.expectation())
         energy_convergence.append(e)
@@ -67,12 +59,11 @@ def vqe_until_converged(
     chunk_maxiter=600,
     jitter_between_cycles=True, jitter_scale=5e-4,
     method="COBYLA", tol=1e-10, rhobeg=0.2,
-    verbose_cycles=False, open_shell=False
+    verbose_cycles=False,
 ):
     """Re-run chunks (optionally jittered) until energy stops improving."""
     best_theta = np.array(theta_start, dtype=float)
-    best_E = energy_expectation(spin_ham_nc, qubit_count, nele_cas, best_theta,
-                                open_shell=open_shell)
+    best_E = energy_expectation(spin_ham_nc, qubit_count, nele_cas, best_theta)
 
     all_quantum_times = []
     all_energy_convergence = []
@@ -98,7 +89,6 @@ def vqe_until_converged(
         out = optimize_vqe_one_chunk(
             spin_ham_nc, qubit_count, nele_cas, x0,
             method=method, tol=tol, maxiter=chunk_maxiter, rhobeg=rhobeg,
-            open_shell=open_shell
         )
 
         all_quantum_times.extend(out["quantum_times"])
@@ -167,8 +157,7 @@ def vqe_until_converged(
 
 def best_of_jitters_one_chunk(spin_ham_nc, qubit_count, nele_cas, theta0, rng,
                               n_restarts=3, jitter_scale=5e-3,
-                              chunk_maxiter=600, method="COBYLA", tol=1e-10, rhobeg=0.2,
-                              open_shell=False):
+                              chunk_maxiter=600, method="COBYLA", tol=1e-10, rhobeg=0.2):
     """Seed search: run several jittered starts and keep the best chunk."""
     candidates = [theta0]
     for _ in range(int(n_restarts)):
@@ -182,7 +171,6 @@ def best_of_jitters_one_chunk(spin_ham_nc, qubit_count, nele_cas, theta0, rng,
         out = optimize_vqe_one_chunk(
             spin_ham_nc, qubit_count, nele_cas, x0,
             method=method, tol=tol, maxiter=chunk_maxiter, rhobeg=rhobeg,
-            open_shell=open_shell
         )
         if (best is None) or (out["E_nc_opt"] < best):
             best = out["E_nc_opt"]
