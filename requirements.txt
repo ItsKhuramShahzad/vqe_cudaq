@@ -1,18 +1,17 @@
-# Exact versions used in this project (Python >= 3.11)
-
-# Quantum chemistry
+# Direct dependencies, pinned to the versions of the published runs (conda environment
+# "vqe_final", Python 3.11.13). The complete list, for an exact rebuild, is
+# environment/vqe_final_pip.txt. The results depend on the CUDA-Q version: another release can
+# give a different energy for the same parameters.
+cudaq==0.11.0
 pyscf==2.6.2
 openfermion==1.6.1
 openfermionpyscf==0.5
+numpy==1.26.4
+scipy==1.16.0
+pandas==2.3.3
+matplotlib==3.11.2
+pytest==9.1.1
 
-# Scientific computing & plotting
-numpy
-scipy
-pandas
-matplotlib==3.8.4
-
-# Interactive analysis plots (analysis/scatter_interactive.py)
-plotly
-
-# CUDA-Q (must be installed separately following NVIDIA instructions)
-cuda-quantum
+# Optional, not part of vqe_final:
+# plotly                                  # analysis/scatter_interactive.py
+# ipython ipywidgets py3Dmol rdkit        # 3D molecule views in Jupyter

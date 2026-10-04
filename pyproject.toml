@@ -7,19 +7,20 @@ name = "vqe_cudaq"
 version = "1.0.0"
 description = "Active-space VQE benchmarking of molecular ground-state energies on CUDA-Q (CPU/GPU)."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = "==3.11.*"
 license = { file = "LICENSE" }
 authors = [{ name = "Khuram Shahzad" }, { name = "Rosa Di Felice" }]
 keywords = ["VQE", "CUDA-Q", "quantum chemistry", "OpenFermion", "PySCF", "UCCSD"]
 
-# NOTE: CUDA-Q (`cuda-quantum`) must be installed separately per NVIDIA's
-# instructions; it is intentionally omitted here so `pip install` of this
-# package does not fail on non-NVIDIA systems.
+# Pinned to the published runs (conda environment "vqe_final"; complete list in
+# environment/vqe_final_pip.txt). CUDA-Q (cudaq==0.11.0) is pinned in requirements.txt and
+# environment/vqe_final_pip.txt; it is not listed here so that installing this package never
+# replaces an existing CUDA-Q installation.
 dependencies = [
-    "numpy",
-    "scipy",
-    "pandas",
-    "matplotlib==3.8.4",
+    "numpy==1.26.4",
+    "scipy==1.16.0",
+    "pandas==2.3.3",
+    "matplotlib==3.11.2",
     "pyscf==2.6.2",
     "openfermion==1.6.1",
     "openfermionpyscf==0.5",

@@ -103,7 +103,9 @@ Each molecule has the same 9 active spaces, from 6 to 14 qubits, written as
 vqe_cudaq/
 ├── README.md
 ├── pyproject.toml            # package metadata + pytest settings
-├── requirements.txt
+├── requirements.txt          # direct dependencies, pinned
+├── environment/
+│   └── vqe_final_pip.txt     # complete package list of the published runs
 ├── LICENSE
 ├── vqe_cudaq/                # the VQE engine (import as `vqe_cudaq`)
 │   ├── __init__.py           # lazy exports; data/config import without CUDA-Q
@@ -151,19 +153,31 @@ vqe_cudaq/
 
 ## ⚙️ Installation
 
+All published results were computed in the conda environment `vqe_final`, identical on the
+CPU and GPU clusters. To rebuild it exactly:
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate            # Linux / macOS
-pip install -e .                     # editable install of `vqe_cudaq`
-# or: pip install -r requirements.txt
-pip install -e ".[interactive]"      # + plotly for the interactive plots
-pip install -e ".[visualization]"    # + Jupyter 3D molecular visualization
+conda create -n vqe_final python=3.11.13
+conda activate vqe_final
+pip install -r environment/vqe_final_pip.txt
 ```
 
-> **CUDA-Q** must be installed separately (see NVIDIA's instructions); it is not
-> pulled in by `pip` so installs succeed on non-NVIDIA machines. Use `nvidia`
-> for GPU and `qpp-cpu` for CPU-only runs.
+`environment/vqe_final_pip.txt` lists every package with its version; `requirements.txt` pins the
+direct dependencies only: CUDA-Q 0.11.0, PySCF 2.6.2, OpenFermion 1.6.1, OpenFermion-PySCF
+0.5, NumPy 1.26.4, SciPy 1.16.0, pandas 2.3.3, Matplotlib 3.11.2 and pytest 9.1.1. Use
+these versions to reproduce the results: another CUDA-Q release can give a different energy
+for the same parameters, and the final-run job scripts stop if the versions differ.
 
+The package runs from the repository root without installation
+(`python -m vqe_cudaq.cli ...`); `pip install -e .` also works and keeps the same pinned
+versions. Optional extras, not part of `vqe_final`:
+
+```bash
+pip install plotly                              # analysis/scatter_interactive.py
+pip install ipython ipywidgets py3Dmol rdkit    # 3D molecule views in Jupyter
+```
+
+CUDA-Q runs on Linux; use the `nvidia` target on a GPU and `qpp-cpu` on a CPU.
 ---
 
 ## 🧬 Interactive 3D molecular geometries
