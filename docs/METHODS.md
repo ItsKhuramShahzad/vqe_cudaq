@@ -52,10 +52,10 @@ and `eq:el_ham_1q`),
 ```math
 \hat{H}_\mathrm{el}\,|\Psi\rangle = E\,|\Psi\rangle ,
 \qquad
-\hat{H}_\mathrm{el} = -\sum_i \frac{\nabla_i^2}{2} - \sum_{i,A}\frac{Z_A}{r_{iA}} + \sum_{i<j}\frac{1}{r_{ij}} ,
+\hat{H}_\mathrm{el} = -\sum_i \frac{\nabla_i^2}{2} - \sum_{i,A}\frac{Z_A}{r_{iA}} + \sum_{i\lt j}\frac{1}{r_{ij}} ,
 ```
 
-is solved for fixed nuclei; the nuclear repulsion $`\sum_{A<B} Z_A Z_B / R_{AB}`$ is added as a
+is solved for fixed nuclei; the nuclear repulsion $`\sum_{A\lt B} Z_A Z_B / R_{AB}`$ is added as a
 constant (Eq. `eq:mol_ham_1q_w_ions`). In second quantization (Eq. `eq:fermion_ham`),
 
 ```math
@@ -148,7 +148,7 @@ loops over $`N_o^{(c)} \ge 1`$ and $`N_o^{(a)}`$, sets $`N_e^{(a)} = N_e^{(\math
 and keeps a configuration when
 
 ```math
-0 < N_e^{(a)} \le 2N_o^{(a)},\qquad
+0 \lt  N_e^{(a)} \le 2N_o^{(a)},\qquad
 N_o^{(a)} \le 2N_e^{(a)},\qquad
 N_e^{(a)} \le 8,\qquad
 N_e^{(a)} \le 2\,(N_o^{(a)}-1),\qquad
@@ -167,9 +167,9 @@ $`2k`$ ($`\alpha`$) and $`2k+1`$ ($`\beta`$), and spin orbital $`p`$ is encoded 
 Jordan–Wigner rules (paper Section "Jordan–Wigner Transformation"),
 
 ```math
-\hat{a}^\dagger_p \mapsto \frac{1}{2}\left(\hat{X}_p - i\hat{Y}_p\right)\prod_{q<p}\hat{Z}_q ,
+\hat{a}^\dagger_p \mapsto \frac{1}{2}\left(\hat{X}_p - i\hat{Y}_p\right)\prod_{q\lt p}\hat{Z}_q ,
 \qquad
-\hat{a}_p \mapsto \frac{1}{2}\left(\hat{X}_p + i\hat{Y}_p\right)\prod_{q<p}\hat{Z}_q ,
+\hat{a}_p \mapsto \frac{1}{2}\left(\hat{X}_p + i\hat{Y}_p\right)\prod_{q\lt p}\hat{Z}_q ,
 ```
 
 give the qubit Hamiltonian (Eq. `eq:qubit_ham`)
@@ -244,8 +244,8 @@ kernel, $`[S_\alpha, S_\beta, D_{\alpha\beta}, D_{\alpha\alpha}, D_{\beta\beta}]
 | $`S_\alpha`$ | $`i`$ (occupied), $`a`$ (unoccupied) | $`s t_i^a`$ |
 | $`S_\beta`$ | $`i`$, $`a`$ | $`s t_i^a`$ |
 | $`D_{\alpha\beta}`$ | $`i_\alpha`$, $`j_\beta`$, $`b_\beta`$, $`a_\alpha`$ | $`-2s t_{ij}^{ab}`$ |
-| $`D_{\alpha\alpha}`$ | $`i<j`$, $`a<b`$ | $`2s (t_{ij}^{ab} - t_{ji}^{ab})`$ |
-| $`D_{\beta\beta}`$ | $`i<j`$, $`a<b`$ | $`2s (t_{ij}^{ab} - t_{ji}^{ab})`$ |
+| $`D_{\alpha\alpha}`$ | $`i\lt j`$, $`a\lt b`$ | $`2s (t_{ij}^{ab} - t_{ji}^{ab})`$ |
+| $`D_{\beta\beta}`$ | $`i\lt j`$, $`a\lt b`$ | $`2s (t_{ij}^{ab} - t_{ji}^{ab})`$ |
 
 with $`s = 1`$ (SI: $`\theta_{0,k} = s\cdot t_k^\mathrm{CCSD,active}`$). The factor 2 on the doubles
 compensates the half angle of the kernel, so that each double excitation starts at its CCSD
@@ -265,7 +265,7 @@ $`\boldsymbol{\theta}_0^{(0)} = \boldsymbol{\theta}_0`$, $`K = 3`$ perturbed can
 
 are generated. All $`K+1 = 4`$ vectors are optimized for one COBYLA chunk of at most 600 energy
 evaluations each; the one reaching the lowest energy is the seed (`vqe.best_of_jitters_one_chunk`). The seed search is skipped when
-$`N_\theta > 150`$, i.e. for (6e,7o).
+$`N_\theta \gt  150`$, i.e. for (6e,7o).
 
 **Stage 2: multi-cycle VQE** (SI Eq. `eq:param_jitter`). In cycle $`c`$, COBYLA runs one chunk of
 at most 600 evaluations. The first cycle starts from the seed; for $`c \ge 2`$ the start is the best
@@ -278,7 +278,7 @@ parameter vector found so far, $`\boldsymbol{\theta}_\mathrm{opt}^{(c-1)}`$, plu
 ```
 
 With $`\Delta E^{(c)} = E_\mathrm{best}^{(c-1)} - E_\mathrm{best}^{(c)}`$, the optimization is
-converged when $`\Delta E^{(c)} < \varepsilon_E = 10^{-6}`$ Ha for $`p = 3`$ consecutive cycles, and
+converged when $`\Delta E^{(c)} \lt  \varepsilon_E = 10^{-6}`$ Ha for $`p = 3`$ consecutive cycles, and
 stops after at most $`C_\mathrm{max} = 25`$ cycles (`vqe.vqe_until_converged`).
 
 **Random numbers.** Every active space has its own generator, seeded with
@@ -290,7 +290,7 @@ $`12345 + \left(\mathrm{SHA256}(\text{molecule}, N_o^{(c)}, N_e^{(a)}, N_o^{(a)}
 | Setting | Value | `config.py` |
 |---|---|---|
 | Optimizer | COBYLA, `tol` $`10^{-10}`$ | `OPTIMIZER`, `TOL` |
-| Initial step `rhobeg` | 0.2; 0.05 when $`N_\theta > 150`$ | `COBYLA_RHOBEG`, `HEAVY_RHOBEG` |
+| Initial step `rhobeg` | 0.2; 0.05 when $`N_\theta \gt  150`$ | `COBYLA_RHOBEG`, `HEAVY_RHOBEG` |
 | Scaling of $`\boldsymbol{\theta}_0`$ | $`s = 1`$ | `THETA_SCALE` |
 | Seed search | $`K = 3`$, $`\sigma_\mathrm{seed} = 5\times10^{-3}`$, skipped above 150 parameters | `N_JITTER_RESTARTS`, `JITTER_SCALE`, `HEAVY_PARAM_THRESHOLD` |
 | Evaluations per chunk | 600 | `VQE_CHUNK_MAXITER` |
