@@ -409,14 +409,23 @@ package code is the checked-out commit. The same commit must be used on both clu
 the UCCSD kernel can give a different state for the same parameters in another CUDA-Q
 version.
 
+First time on a cluster, clone the repository (public, no GitHub login needed); after
+that, `git pull` in the same folder brings every update:
+
 ```bash
-git pull                                              # same commit on both clusters
+git clone https://github.com/ItsKhuramShahzad/vqe_cudaq.git   # first time only
+cd vqe_cudaq
+git pull                                              # later: same commit on both clusters
+conda activate vqe_final
+python -m pytest tests/test_ansatz.py                 # quick check of the CUDA-Q version
 SPACE_IDX=7 sbatch --array=3 scripts/run_cpu_final.sh # short test: Benzene (2,3)
-sbatch scripts/run_cpu_final.sh                       # all 12 molecules
+sbatch scripts/run_cpu_final.sh                       # all 12 molecules (GPU: run_gpu_final.sh)
 ```
 
 Run the scripts from the repository root, without installing the package into the
-environment (`python -m vqe_cudaq.cli` needs no install).
+environment (`python -m vqe_cudaq.cli` needs no install). Do not edit the code on the
+cluster: a task stops if `vqe_cudaq/` differs from the commit; change it elsewhere, push,
+and pull.
 
 ---
 
