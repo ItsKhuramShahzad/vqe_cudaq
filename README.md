@@ -14,6 +14,9 @@ across:
 - multiple active-space selections `(ncore, nele_cas, norb_cas)`
 - CPU vs GPU backends and precisions
 
+The methods of the paper, with every equation mapped to the code that evaluates it, are
+described in [`docs/METHODS.md`](docs/METHODS.md).
+
 ---
 
 ## 🧪 Benchmark molecules
@@ -135,6 +138,8 @@ vqe_cudaq/
 │   ├── run_gpu_final.sh      # SLURM array for the final benchmark, GPU node
 │   └── final_run_common.sh   # shared part: version and commit checks, molecule list
 ├── tests/                    # pytest suite, runs on a CPU (see "Tests" below)
+├── docs/
+│   └── METHODS.md            # the paper's methods, equation by equation, mapped to the code
 ├── notebooks/
 │   └── Molecular_Orbital_Visualization.ipynb
 ├── integrals/                # active-space integrals + CCSD amplitudes (see its README)
