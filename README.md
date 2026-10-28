@@ -502,7 +502,7 @@ python -m pytest                   # all 680 tests
 
 ## 👤 Authors
 
-**Khuram Shahzad(https://www.linkedin.com/in/itskhuramshahzad/)**<sup>1,\*</sup> and **[Rosa Di Felice](https://dornsife.usc.edu/profile/rosa-di-felice/)**<sup>2,3,\*</sup>
+**[Khuram Shahzad](https://www.linkedin.com/in/itskhuramshahzad/)**<sup>1,\*</sup> and **[Rosa Di Felice](https://dornsife.usc.edu/profile/rosa-di-felice/)**<sup>2,3,\*</sup>
 
 1. Department of Physics, Informatics and Mathematics, University of Modena and Reggio Emilia, 41125 Modena, Italy
 2. Departments of Physics and Astronomy, and Quantitative and Computational Biology, University of Southern California, Los Angeles, CA 90089, USA
