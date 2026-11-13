@@ -120,6 +120,7 @@ vqe_cudaq/
 │   ├── backend.py            # CUDA-Q target selection, fp64 check, version tripwire
 │   ├── operators.py          # qubit-op helpers + CCSD→UCCSD θ₀ packing
 │   ├── hamiltonian.py        # integral files: make, save, load; qubit Hamiltonian
+│   ├── orbital_selection.py  # orbital character (π, σ, lone pair); selection rules
 │   ├── ansatz.py             # UCCSD kernel + energy expectation
 │   ├── vqe.py                # single-chunk / multi-cycle / jitter optimizers
 │   ├── insights.py           # PySCF/OpenFermion diagnostics
@@ -134,6 +135,11 @@ vqe_cudaq/
 │   └── latex_report.py       # full PGFPlots/LaTeX figure report -> tex_out/
 ├── scripts/
 │   ├── dump_integrals.py     # writes the integral files from the geometries
+│   ├── hf_orbitals.py        # HF level diagrams and orbital isosurfaces, no core
+│   ├── compare_active_spaces.py # CASCI energy of each orbital-selection rule
+│   ├── bond_type_casci.py    # CASCI by bond type, HOMO-k/LUMO+k left out, selection ratio vs best
+│   ├── pi_plus_sigma_casci.py # CASCI in the π space plus any σ/σ* choice (skipping allowed)
+│   ├── run_bond_type_casci.sh # SLURM array: bond-type CASCI + HOMO/LUMO left out, all molecules
 │   ├── run_cpu_final.sh      # SLURM array for the final benchmark, CPU node
 │   ├── run_gpu_final.sh      # SLURM array for the final benchmark, GPU node
 │   └── final_run_common.sh   # shared part: version and commit checks, molecule list
@@ -495,6 +501,8 @@ python -m pytest                   # all 680 tests
 | `test_theta0.py` | CCSD → θ₀ packing (order, values, count), θ₀ energy between CASCI and HF, reproduces a published run |
 | `test_backend.py` | CUDA-Q version check, fp64 enforcement, run metadata (including the git commit), machine-independent seeds |
 | `test_results.py` | reference PKLs: corrected packer, VQE within 1.6 mHa of CASCI, energies match the integral files, CPU and GPU agree |
+| `test_orbital_selection.py` | orbital labels against Lewis structures, selection rules, invalid orbital lists |
+| `test_bond_character.py` | bond type and character of every orbital of all 12 molecules: bonds of the geometry, Lewis π counts, lone pairs, reflection, PySCF `vvo`, AVAS |
 | `test_analysis.py` | analysis scripts read `results/`, keep the molecule order, and write the tables and LaTeX report |
 | `test_driver.py` (slow) | full runs from integral files, from the geometry and from the CLI reach CASCI |
 
