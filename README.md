@@ -97,6 +97,9 @@ Each molecule has the same 9 active spaces, from 6 to 14 qubits, written as
   full PGFPlots/LaTeX report generator
 - **Molecular-orbital inspection**: all-MO Molden/CSV export, frontier cube
   files, MO energy diagrams, and positive/negative Jupyter isosurfaces
+- **Active-space selection by bond type**: every MO labelled by the bond it belongs to
+  (IBO/LIVVO), active spaces built from bond types (levels may be skipped), scored with CASCI
+  and selected with a ratio criterion; usable directly in the VQE (`--active-space-rule`)
 
 ---
 
@@ -142,6 +145,8 @@ vqe_cudaq/
 │   ├── bond_type_casci.py    # CASCI by bond type, HOMO-k/LUMO+k left out, selection ratio vs best
 │   ├── check_bond_type_casci.py # independent checks of the bond-type CASCI files (fresh CASCI too)
 │   ├── bond_type_overview.py # one row per molecule from the summary sheets
+│   ├── bond_type_figure.py   # figure: energy order vs bond type, MOs as sums of IBOs/LIVVOs
+│   ├── bond_type_paper_figure.py # paper version of that figure (single column) + captions
 │   ├── pi_plus_sigma_casci.py # CASCI in the π space plus any σ/σ* choice (skipping allowed)
 │   ├── run_bond_type_casci.sh # SLURM array: bond-type CASCI + HOMO/LUMO left out, all molecules
 │   ├── run_cpu_final.sh      # SLURM array for the final benchmark, CPU node
@@ -326,7 +331,139 @@ For active-space selection, inspect orbital energy, occupation, spatial shape,
 symmetry/localization, and chemical character together. Do not select solely
 by proximity to the HOMO-LUMO gap: include near-degenerate orbitals and both
 members of chemically important bonding/antibonding pairs. Generated MO data
-are ignored by Git because cube files can be very large.
+are ignored by Git because cube files can be very large. A systematic way to do
+this is the bond-type selection described in the next section.
+
+---
+
+## 🔗 Active-space selection by bond type
+
+The published runs take the active orbitals nearest the HOMO–LUMO gap (energy order).
+The bond-type selection chooses them by the **bond they belong to** instead, so an active
+space may skip orbitals (for example HOMO and HOMO−2 without HOMO−1).
+
+**The idea, in five steps** (molecule by molecule):
+
+1. **Orbitals.** Restricted Hartree–Fock; the 1s core orbitals are frozen.
+2. **Bond type of each MO.** For planar molecules σ and π are separated first. Occupied MOs
+   are written in intrinsic bond orbitals (IBOs; Knizia, *J. Chem. Theory Comput.* 9, 4834, 2013),
+   virtual MOs in localized valence virtual orbitals (LIVVOs; PySCF `lo.vvo`,
+   doi:10.1021/acs.jctc.7b00493). The share of each bond is the squared overlap; the largest
+   share gives the type (C–C π, C–H σ, N lone pair, C–C π\*, …). A virtual MO with no
+   antibond share ≥ 0.1 is "no bond (outside valence)": it is made of the basis functions
+   beyond the minimal basis. Degenerate MOs get one label and are always taken together.
+3. **Candidate spaces.** For occupied and virtual MOs separately: each type, pairs of types,
+   families (all π, all X–H σ, all lone pairs, all π\*, …), pairs of families and all types;
+   every occupied set × every virtual set; inside a set the MOs nearest the gap first; every
+   size up to (8e,10o). The same is repeated with one of HOMO−1, −2, −3 or LUMO+1, +2, +3
+   left out.
+4. **Score.** CASCI of every space, E_corr = (E_CASCI − E_HF) × 1000 mHa, and frozen-core CCSD
+   of the whole molecule for reference.
+5. **Select.** E_best = most negative E_corr of all spaces of the molecule;
+   ratio = (E_corr − E_best) / |E_best|; a space passes when ratio < 0.25 (it recovers at
+   least 75 % of E_best).
+
+Ethylene (cc-pVDZ): 1988 different spaces up to (8e,10o), 74 pass; the best is (8e,10o)
+with HOMO−1 left out, E_corr = −39.1 mHa, against −29.3 mHa for the energy-ordered (8e,10o).
+With T bond types and F families per side, at most S = T + C(T,2) + F + C(F,2) + 2 sets per
+side are built and one space per set pair and size, i.e. N ≤ (1+L)·S_occ·S_vir·N_size
+(L left-out orbitals, N_size = 30 sizes up to (8e,10o)); a free choice of orbitals would give
+4.3 × 10⁹ spaces for ethylene.
+
+### 1. Look at the orbitals (optional)
+
+```bash
+# level diagram coloured by bond type, bond shares and isosurfaces of every MO (PDF per molecule)
+python scripts/hf_orbitals.py --molecule Ethylene
+```
+
+### 2. Run the search
+
+```bash
+# one molecule on a laptop: all sizes up to (8e,10o), then the left-out cases
+python scripts/bond_type_casci.py --molecule Ethylene --outdir analysis/bond_type_casci \
+    --leave-out 1 2 3 --leave-out-virtual 1 2 3
+
+# all 12 molecules on the cluster (SLURM array, one task per molecule; see the script header)
+sbatch scripts/run_bond_type_casci.sh
+```
+
+| Option | Meaning (default) |
+|---|---|
+| `--max-electrons`, `--max-orbitals` | largest active space (8, 10) |
+| `--max-virtual` | largest number of virtual MOs (same as `--max-orbitals`) |
+| `--max-union` | bond types mixed on one side (2) |
+| `--types` | use only these bond types, e.g. `"C–C π" "C–C π*"` (all) |
+| `--no-outside-valence` | do not use the "no bond (outside valence)" virtual MOs |
+| `--leave-out`, `--leave-out-virtual` | HOMO−k / LUMO+k to leave out, e.g. `1 2 3` (none) |
+| `--ratio-max` | starting threshold written into the Excel file (0.25) |
+| `--summary-only` | only rebuild the Excel file from the CSV files (no calculation) |
+| `--max-memory` | PySCF memory in MB (16000) |
+
+A molecule whose main CSV file already exists skips the main search, so an interrupted
+cluster job can be restarted. The heavy molecules (tetracene, pentacene) need a compute node:
+pentacene took 7 h and 52 GB with 8 cores.
+
+### 3. Results
+
+All in the `--outdir` folder (results are not tracked by Git):
+
+| File | Contents |
+|---|---|
+| `<molecule>_bond_type_casci.csv` | every CASCI of the type search (raw, one row per type set and size) |
+| `<molecule>_bond_type_casci_left_out.csv` | the new spaces with a HOMO−k or LUMO+k left out |
+| `<molecule>_bond_type_casci_summary.xlsx` | the file to read, see below |
+| `<molecule>_bond_type_casci_run.json` | computer, threads, git commit, settings and time of the run |
+
+The Excel file has four sheets:
+
+| Sheet | Contents |
+|---|---|
+| `summary` | molecule, E_HF, CCSD, number of spaces, best space, selection criterion, checks, run time |
+| `all spaces` | every different space: orbitals, types with counts (e.g. `C–C π (1) + C–H σ (2)`), E_CASCI, E_corr, % of CCSD, gain over energy order, ratio, passes, left-out and skipped orbitals |
+| `passes ratio < 0.25` | the passing spaces, best first |
+| `VQE (paper spaces)` | the published VQE spaces next to their CASCI |
+
+E_best, the ratio and the pass column are **Excel formulas**: change the threshold cell in the
+`summary` sheet and they update (the `passes` sheet is a list made at the threshold of the run;
+for another threshold filter `all spaces` on `passes = yes`).
+
+```bash
+# Excel files again from the CSV files (e.g. after a cluster run without openpyxl)
+python scripts/bond_type_casci.py --molecule Ethylene --outdir analysis/bond_type_casci_hpc --summary-only
+
+# one overview file, one row per molecule
+python scripts/bond_type_overview.py --outdir analysis/bond_type_casci_hpc
+
+# independent checks: row counts, formulas, degenerate sets, left-out orbitals, fresh CASCI
+python scripts/check_bond_type_casci.py --outdir analysis/bond_type_casci_hpc --molecule Ethylene Benzene
+```
+
+### 4. Use the selected spaces in the VQE
+
+```bash
+# the best space of each size that passes the ratio criterion
+python -m vqe_cudaq.cli --molecule Ethylene --integrals integrals \
+    --active-space-rule bond-type --bond-type-dir analysis/bond_type_casci_hpc --sizes all --select best-per-size
+```
+
+All options (`--sizes`, `--rank`, `--select`, `--top`, `--ratio-max`, `--bond-type-compute`) are in
+[Choosing the active orbitals](#choosing-the-active-orbitals-energy-bond-type-or-by-hand). The VQE
+command does not need step 2: a size that is not in `--bond-type-dir` is searched on the spot.
+The CCSD amplitudes that start the VQE are cut to the chosen orbitals; this is checked against
+CCSD rerun with the chosen orbitals moved into a block (equal to 1e-14).
+
+### 5. Figures
+
+```bash
+# working figure: energy order vs bond type at two sizes, and where the types come from
+python scripts/bond_type_figure.py --molecule Ethylene --size 6,8
+# paper version: single-column level diagram, orbital pictures and suggested captions
+python scripts/bond_type_paper_figure.py --molecule Ethylene --size 6,8
+```
+
+Both write to `analysis/figures/bond_type_selection/` and need scikit-image
+(`pip install -e ".[visualization]"`).
 
 ---
 
