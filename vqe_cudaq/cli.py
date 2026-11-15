@@ -11,6 +11,12 @@ Examples
     python -m vqe_cudaq.cli --generate-active-spaces --total-orbitals 40 --total-electrons 15
     python -m vqe_cudaq.cli --analyze-active-spaces --molecule Ethylene
     python -m vqe_cudaq.cli --export-mos --molecule Ethylene --basis cc-pVDZ
+
+Choosing the active orbitals (default: energy, the published spaces):
+    python -m vqe_cudaq.cli --molecule Ethylene --active-space-rule manual \
+        --active-orbitals HOMO HOMO-2 LUMO LUMO+3
+    python -m vqe_cudaq.cli --molecule Ethylene --active-space-rule bond-type \
+        --bond-type-dir analysis/bond_type_casci_hpc --sizes 6,8 4,4 --rank 1
 """
 
 import os
@@ -50,6 +56,41 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Read the Hamiltonian, E_HF, E_CASCI and CCSD amplitudes from "
                         "this integrals folder instead of running PySCF; missing files "
                         "are computed and saved there.")
+    p.add_argument("--active-space-rule", "--orbital-rule", dest="active_space_rule", default="energy",
+                   choices=["energy", "bond-type", "manual"],
+                   help="How the active orbitals are chosen: energy = the molecule's published "
+                        "spaces (nearest the gap); bond-type = the best spaces found by "
+                        "scripts/bond_type_casci.py (--bond-type-dir, --sizes, --rank); "
+                        "manual = the orbitals in --active-orbitals.")
+    p.add_argument("--active-orbitals", nargs="+", default=None,
+                   help="manual rule: orbitals such as HOMO HOMO-2 LUMO LUMO+3 (or MO numbers "
+                        "from 0); the other occupied orbitals are frozen.")
+    p.add_argument("--bond-type-dir", default=os.path.join("analysis", "bond_type_casci_hpc"),
+                   help="bond-type rule: folder with <molecule>_bond_type_casci.csv "
+                        "(and _left_out.csv). Sizes that are not there are searched and added.")
+    p.add_argument("--bond-type-compute", default="missing", choices=["missing", "never"],
+                   help="bond-type rule: missing = search a size that is not in --bond-type-dir yet "
+                        "(SCF, orbital types, CASCI of that size; default); never = only read the files.")
+    p.add_argument("--sizes", nargs="+", default=None,
+                   help="bond-type rule: active-space sizes as electrons,orbitals, e.g. 6,8 4,4 "
+                        "(the --rank best space of each), or 'all': every size up to "
+                        "--bond-type-max-electrons/--bond-type-max-orbitals, selected with "
+                        "--ratio-max and --select.")
+    p.add_argument("--bond-type-max-electrons", type=int, default=8,
+                   help="bond-type rule with --sizes all: largest number of active electrons (8).")
+    p.add_argument("--bond-type-max-orbitals", type=int, default=10,
+                   help="bond-type rule with --sizes all: largest number of active orbitals (10).")
+    p.add_argument("--ratio-max", type=float, default=0.25,
+                   help="bond-type rule with --sizes all: a space passes when "
+                        "(E_corr - E_best)/|E_best| < this (0.25); E_best = best E_corr of all sizes.")
+    p.add_argument("--select", default="best-per-size", choices=["best-per-size", "top", "all"],
+                   help="bond-type rule with --sizes all: which passing spaces get a VQE run: "
+                        "best-per-size = the best of each size (default), top = the --top best "
+                        "overall, all = every passing space.")
+    p.add_argument("--top", type=int, default=5,
+                   help="with --select top: number of spaces (5).")
+    p.add_argument("--rank", type=int, default=1,
+                   help="bond-type rule: 1 = the best E_corr of that size, 2 = second best, ...")
     p.add_argument("--max-memory", "--max_memory", type=int, default=config.MAX_MEMORY,
                    help="PySCF memory limit in MB when a missing integral file is made.")
     p.add_argument("--export-xyz", "--export_xyz", action="store_true",
@@ -220,6 +261,93 @@ def _run_active_space_analysis(args):
         raise SystemExit("No molecule could be analyzed with the available metadata.")
 
 
+def chosen_active_spaces(args, name, spec):
+    """The active spaces of the manual and bond-type rules, as driver space dicts."""
+    from pyscf import gto
+    from .chosen_spaces import bond_type_space, chosen_space
+    from .xyz import geometry_in_angstrom
+
+    if args.space_idx is not None:
+        raise SystemExit("--space_idx picks a published (energy-rule) space; it cannot be "
+                         f"used with --active-space-rule {args.active_space_rule}.")
+    mol = gto.M(atom=geometry_in_angstrom(spec), unit="Angstrom", basis=args.basis,
+                charge=int(spec["charge"]), spin=int(spec["multiplicity"]) - 1, verbose=0)
+    nocc, nmo = mol.nelectron // 2, mol.nao_nr()
+    if args.active_space_rule == "manual":
+        if not args.active_orbitals:
+            raise SystemExit("--active-space-rule manual needs --active-orbitals, e.g. HOMO HOMO-2 LUMO LUMO+3")
+        return [chosen_space(args.active_orbitals, nocc, nmo, rule="manual")]
+    if not args.sizes:
+        raise SystemExit("--active-space-rule bond-type needs --sizes, e.g. --sizes 6,8 4,4 or --sizes all")
+    if [s.lower() for s in args.sizes] == ["all"]:
+        return passing_active_spaces(args, name, spec, mol)
+    sizes = []
+    for size in args.sizes:
+        try:
+            nele, norb = (int(v) for v in size.replace("(", "").replace(")", "")
+                          .replace("e", "").replace("o", "").split(","))
+        except ValueError:
+            raise SystemExit(f"--sizes {size!r}: write electrons,orbitals, e.g. 6,8")
+        if nele % 2 or nele < 2 or nele // 2 >= norb:
+            raise SystemExit(f"--sizes {size!r}: needs an even number of electrons and more "
+                             f"orbitals than electron pairs, e.g. 6,8")
+        sizes.append((nele, norb))
+    if args.bond_type_compute == "missing":
+        from .bond_type_search import ensure_size, stored_sizes
+        missing = [s for s in sizes if s not in stored_sizes(args.bond_type_dir, name)]
+        if missing:
+            from .hamiltonian import run_scf
+            mf = run_scf(spec, args.basis, max_memory=args.max_memory)
+            for nele, norb in missing:
+                ensure_size(args.bond_type_dir, name, mf, nele, norb, max_memory=args.max_memory)
+    return [bond_type_space(args.bond_type_dir, name, nele, norb, nocc, nmo, args.rank)
+            for nele, norb in sizes]
+
+
+def passing_active_spaces(args, name, spec, mol):
+    """--sizes all: search every size up to the limits (missing ones only), then select the
+    spaces that pass the ratio criterion (--ratio-max) with --select / --top."""
+    from pyscf.data.elements import chemcore
+    from .chosen_spaces import ChosenSpaceError, passing_spaces
+
+    max_e, max_o = args.bond_type_max_electrons, args.bond_type_max_orbitals
+    if max_e < 2 or max_e % 2 or max_o <= max_e // 2:
+        raise SystemExit(f"--bond-type-max-electrons {max_e} / --bond-type-max-orbitals {max_o}: "
+                         f"need an even number of electrons and more orbitals than electron pairs")
+    if args.top < 1:
+        raise SystemExit("--top must be at least 1")
+    nocc, nmo = mol.nelectron // 2, mol.nao_nr()
+    if args.bond_type_compute == "missing":
+        from .bond_type_search import all_sizes, ensure_sizes, stored_sizes
+        sizes = all_sizes(max_e, max_o, nocc - chemcore(mol), nmo - nocc)
+        if set(sizes) - stored_sizes(args.bond_type_dir, name):
+            from .hamiltonian import run_scf
+            mf = run_scf(spec, args.basis, max_memory=args.max_memory)
+            ensure_sizes(args.bond_type_dir, name, mf, sizes, max_memory=args.max_memory, require=False)
+    try:
+        spaces = passing_spaces(args.bond_type_dir, name, nocc, nmo, max_e, max_o,
+                                ratio_max=args.ratio_max, select=args.select, top=args.top)
+    except ChosenSpaceError as err:
+        raise SystemExit(str(err))
+    if not spaces:
+        raise SystemExit(f"{name}: no space passes ratio < {args.ratio_max:g}")
+    s0 = spaces[0]
+    print(f"[SELECT] {name}: E_best {s0['E_best_mHa']:.3f} mHa over all sizes up to ({max_e}e,{max_o}o); "
+          f"{len(spaces)} space(s) with ratio < {args.ratio_max:g}, select = {args.select}"
+          f"{f' (top {args.top})' if args.select == 'top' else ''}", flush=True)
+    return spaces
+
+
+def space_line(s):
+    """One line about a chosen space for the run log."""
+    line = f"({s['nele_cas']}e,{s['norb_cas']}o) {s['label']}"
+    if s.get("left_out"):
+        line += f" (left out {s['left_out']})"
+    if "ratio" in s:
+        line += f"  E_corr {s['E_corr_mHa']:.3f} mHa, ratio {s['ratio']:.3f}"
+    return line
+
+
 def _apply_config(args):
     """Push CLI options into the shared config namespace."""
     config.BASIS = args.basis
@@ -338,6 +466,8 @@ def main(argv=None):
     from .driver import run_one_molecule, run_all_molecules
 
     if args.all:
+        if args.active_space_rule != "energy":
+            raise SystemExit(f"--active-space-rule {args.active_space_rule} runs one --molecule at a time.")
         run_all_molecules(molecules, out_dir=out_dir, integrals_dir=args.integrals)
         return
 
@@ -350,7 +480,11 @@ def main(argv=None):
 
     spec = dict(molecules[molecule_name])
 
-    if args.space_idx is not None:
+    if args.active_space_rule != "energy":
+        spec["valid_active_spaces"] = chosen_active_spaces(args, molecule_name, spec)
+        for s in spec["valid_active_spaces"]:
+            print(f"[SPACE] {args.active_space_rule}: {space_line(s)}", flush=True)
+    elif args.space_idx is not None:
         spaces = spec.get("valid_active_spaces", [])
         if args.space_idx < 0 or args.space_idx >= len(spaces):
             raise ValueError(f"--space_idx {args.space_idx} out of range")
@@ -359,7 +493,8 @@ def main(argv=None):
     print(
         f"[RUN] {molecule_name} | BASIS={config.BASIS} | TARGET={config.TARGET} "
         f"| PRECISION={config.TARGET_PRECISION or 'default'} | OPT={config.OPTIMIZER}"
-        f"{' | INTEGRALS=' + args.integrals if args.integrals else ''}",
+        f"{' | INTEGRALS=' + args.integrals if args.integrals else ''}"
+        f" | ACTIVE SPACE RULE={args.active_space_rule}",
         flush=True,
     )
 
@@ -369,9 +504,12 @@ def main(argv=None):
     mol_clean = sanitize_name(molecule_name)
     file_name = (
         f"{tag}_{mol_clean}_{sanitize_name(config.BASIS)}_"
-        f"{sanitize_name(config.TARGET)}_{sanitize_name(config.OPTIMIZER)}_VQE_results.pkl"
+        f"{sanitize_name(config.TARGET)}_{sanitize_name(config.OPTIMIZER)}"
+        f"{'' if args.active_space_rule == 'energy' else '_' + sanitize_name(args.active_space_rule)}_VQE_results.pkl"
     )
     out_path = os.path.join(out_dir, file_name)
+    if args.active_space_rule != "energy":
+        mol_res["active_space_rule"] = args.active_space_rule
     save_pkl({molecule_name: mol_res}, out_path)
     print(f"[DONE] Saved -> {out_path}", flush=True)
 

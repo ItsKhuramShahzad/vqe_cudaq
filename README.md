@@ -121,6 +121,8 @@ vqe_cudaq/
 │   ├── operators.py          # qubit-op helpers + CCSD→UCCSD θ₀ packing
 │   ├── hamiltonian.py        # integral files: make, save, load; qubit Hamiltonian
 │   ├── orbital_selection.py  # orbital character (π, σ, lone pair); selection rules
+│   ├── chosen_spaces.py      # active spaces as orbital lists: manual names, bond-type results
+│   ├── bond_type_search.py   # bond-type search: orbital types, type sets, CASCI; one size on the fly
 │   ├── ansatz.py             # UCCSD kernel + energy expectation
 │   ├── vqe.py                # single-chunk / multi-cycle / jitter optimizers
 │   ├── insights.py           # PySCF/OpenFermion diagnostics
@@ -138,6 +140,8 @@ vqe_cudaq/
 │   ├── hf_orbitals.py        # HF level diagrams and orbital isosurfaces, no core
 │   ├── compare_active_spaces.py # CASCI energy of each orbital-selection rule
 │   ├── bond_type_casci.py    # CASCI by bond type, HOMO-k/LUMO+k left out, selection ratio vs best
+│   ├── check_bond_type_casci.py # independent checks of the bond-type CASCI files (fresh CASCI too)
+│   ├── bond_type_overview.py # one row per molecule from the summary sheets
 │   ├── pi_plus_sigma_casci.py # CASCI in the π space plus any σ/σ* choice (skipping allowed)
 │   ├── run_bond_type_casci.sh # SLURM array: bond-type CASCI + HOMO/LUMO left out, all molecules
 │   ├── run_cpu_final.sh      # SLURM array for the final benchmark, CPU node
@@ -400,6 +404,61 @@ python -m vqe_cudaq.cli --molecule Ethylene --target nvidia --basis cc-pVDZ
 python -m vqe_cudaq.cli --all --target qpp-cpu --optimizer COBYLA
 ```
 
+### Choosing the active orbitals: energy, bond type or by hand
+
+`--active-space-rule` sets how the orbitals of an active space are chosen. The default,
+`energy`, takes the block nearest the HOMO–LUMO gap and runs the molecule's published
+spaces exactly as before. The other two rules run one molecule at a time; every occupied
+orbital that is not chosen stays doubly occupied (frozen).
+
+| `--active-space-rule` | Orbitals | Extra options |
+|---|---|---|
+| `energy` (default) | nearest the gap, the published spaces | `--space_idx` |
+| `bond-type` | the best space of each size by bond type (the search of `scripts/bond_type_casci.py`) | `--sizes`, `--rank`, `--bond-type-dir`, `--bond-type-compute` |
+| `manual` | the orbitals you list | `--active-orbitals` |
+
+```bash
+# by hand: HOMO-1 left out (4 electrons in 4 orbitals)
+python -m vqe_cudaq.cli --molecule Ethylene --target qpp-cpu --integrals integrals \
+    --active-space-rule manual --active-orbitals HOMO-2 HOMO LUMO LUMO+3
+
+# the best (6e,8o) and (4e,4o) spaces of the bond-type search (rank 2 = second best)
+python -m vqe_cudaq.cli --molecule Ethylene --target qpp-cpu --integrals integrals \
+    --active-space-rule bond-type --bond-type-dir analysis/bond_type_casci_hpc --sizes 6,8 4,4 --rank 1
+```
+
+The bond-type rule reads the search results in `--bond-type-dir`. A size that is not there
+yet (a new molecule, or a size outside the earlier search) is searched on the spot, only that
+size: orbital types, every type set and the HOMO-1..-3 / LUMO+1..+3 left-out cases, CASCI of
+each, and the frozen-core CCSD of the molecule once. The rows are added to the CSV files in
+that folder, so the next run only reads them. `--bond-type-compute never` only reads the files.
+`--rank 1` (default) takes the best E_corr of the size, `--rank 2` the second best, and so on.
+
+With `--sizes all` every size up to `--bond-type-max-electrons` / `--bond-type-max-orbitals`
+(default 8 and 10) is searched (missing sizes only), and the spaces are chosen with the
+selection criterion of the Excel files: E_best = best E_corr of all sizes,
+ratio = (E_corr − E_best) / |E_best|, a space passes when ratio < `--ratio-max` (0.25).
+`--select` sets which passing spaces get a VQE run:
+
+| `--select` | VQE runs |
+|---|---|
+| `best-per-size` (default) | the best passing space of each size |
+| `top` | the `--top N` best passing spaces overall (default 5) |
+| `all` | every passing space |
+
+```bash
+python -m vqe_cudaq.cli --molecule Ethylene --integrals integrals --active-space-rule bond-type \
+    --sizes all --ratio-max 0.25 --select top --top 5
+```
+
+Orbitals are named `HOMO`, `HOMO-k`, `LUMO`, `LUMO+k` (or MO numbers from 0). A chosen
+space gets its own integral file, with the orbitals in the name
+(`..._No(a)_4_orbs_5-7-8-11.npz`), and its own result file (`..._manual_VQE_results.pkl`,
+`..._bond-type_VQE_results.pkl`), so the published files are never touched. The PKL keeps
+the orbitals in `space["active_orbitals"]` and `space["label"]`. A bond-type run stops if its
+CASCI energy differs from the bond-type table, and a manual space that takes only part of a
+degenerate set is run with a warning (`space["warnings"]`).
+
 ### From Python
 
 ```python
@@ -502,6 +561,8 @@ python -m pytest                   # all 680 tests
 | `test_backend.py` | CUDA-Q version check, fp64 enforcement, run metadata (including the git commit), machine-independent seeds |
 | `test_results.py` | reference PKLs: corrected packer, VQE within 1.6 mHa of CASCI, energies match the integral files, CPU and GPU agree |
 | `test_orbital_selection.py` | orbital labels against Lewis structures, selection rules, invalid orbital lists |
+| `test_bond_type_search.py` | the bond-type search: one size equals the full search and the cluster run, sizes searched once and added, CLI with no result files; slow: VQE for a new user without any files |
+| `test_chosen_spaces.py` | chosen orbital lists: names, bond-type tables, integrals checked four ways, files never mixed with the published ones, CLI; slow: VQE on a chosen space reaches CASCI |
 | `test_bond_character.py` | bond type and character of every orbital of all 12 molecules: bonds of the geometry, Lewis π counts, lone pairs, reflection, PySCF `vvo`, AVAS |
 | `test_analysis.py` | analysis scripts read `results/`, keep the molecule order, and write the tables and LaTeX report |
 | `test_driver.py` (slow) | full runs from integral files, from the geometry and from the CLI reach CASCI |

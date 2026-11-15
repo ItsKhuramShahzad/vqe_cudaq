@@ -39,6 +39,10 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
     PySCF. Missing files are computed and saved there. Without it, the geometry
     route (SCF + CCSD + CASCI here) is used.
 
+    A space with ``"active_orbitals"`` (MO numbers, see :mod:`vqe_cudaq.chosen_spaces`)
+    uses exactly those orbitals; the other occupied orbitals are frozen. A space without it
+    is the energy block ``ncore ... ncore+norb_cas-1``, as in the published runs.
+
     Closed-shell molecules only. Every active space starts from the CCSD amplitudes
     (corrected packer); if they cannot be obtained or packed, the run stops with an
     error, it never starts from zeros or random parameters.
@@ -91,7 +95,8 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         first = None
         for s in active_spaces:
             try:
-                first = files.get(int(s["ncore"]), int(s["nele_cas"]), int(s["norb_cas"]))
+                first = files.get(int(s["ncore"]), int(s["nele_cas"]), int(s["norb_cas"]),
+                                  s.get("active_orbitals"))
                 break
             except SpaceDoesNotFit:
                 continue
@@ -179,16 +184,32 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         nele_cas = int(space["nele_cas"])
         norb_cas = int(space["norb_cas"])
         qubit_count = 2 * norb_cas
+        chosen = space.get("active_orbitals")       # None: the energy block (published runs)
 
         # One random generator per (molecule, active space). stable_hash is based on
         # SHA-256, so the seed, and every perturbation drawn from it, is the same in
-        # every Python session and on every machine (CPU and GPU runs alike).
-        local_rng = np.random.default_rng(
-            SEED + stable_hash((mol_name, ncore, nele_cas, norb_cas))
-        )
+        # every Python session and on every machine (CPU and GPU runs alike). A chosen
+        # space adds its orbitals to the key; the energy rule keeps the published key.
+        key = (mol_name, ncore, nele_cas, norb_cas)
+        if chosen is not None:
+            key += (tuple(sorted(int(k) for k in chosen)),)
+        local_rng = np.random.default_rng(SEED + stable_hash(key))
 
-        occ = list(range(ncore))
-        act = list(range(ncore, ncore + norb_cas))
+        if chosen is None:
+            occ = list(range(ncore))
+            act = list(range(ncore, ncore + norb_cas))
+        else:
+            act = sorted(int(k) for k in chosen)
+            occ = [k for k in range(nocc) if k not in act]
+            if len(act) != norb_cas or len(occ) != ncore or 2 * (nocc - ncore) != nele_cas:
+                raise ValueError(f"{mol_name}: active orbitals {act} do not match "
+                                 f"ncore={ncore}, nele_cas={nele_cas}, norb_cas={norb_cas}")
+            if mf is not None:      # a degenerate set taken only in part: warn, keep the run
+                from .chosen_spaces import chosen_space
+                warnings = chosen_space(act, nocc, nmo, mo_energy=mf.mo_energy)["warnings"]
+                space = {**space, "warnings": warnings}
+                for w in warnings:
+                    print(f"[WARNING] {mol_name} {space.get('label', act)}: {w}", flush=True)
 
         if len(act) == 0 or act[-1] >= nmo:
             molecule_results["active_space_runs"].append({
@@ -210,7 +231,7 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         data = None
         if files is not None:
             # CASCI energy, Hamiltonian and CCSD amplitudes from the integral file
-            data = files.get(ncore, nele_cas, norb_cas)
+            data = files.get(ncore, nele_cas, norb_cas, chosen)
             E_CASCI = float(data["e_casci"])
             qop = qubit_hamiltonian(data)
             molecule_results["timing"]["pyscf_run_scf_seconds"] = float(files.seconds)
@@ -218,13 +239,21 @@ def run_one_molecule(mol_name: str, spec: dict, integrals_dir: str = None):
         else:
             casci = mcscf.CASCI(mf, norb_cas, nele_cas)
             casci.ncore = ncore
-            casci_out = casci.kernel()
+            if chosen is None:
+                casci_out = casci.kernel()
+            else:                   # the chosen orbitals active, the other occupied ones frozen
+                casci_out = casci.kernel(casci.sort_mo([k + 1 for k in act]))
             E_CASCI = float(casci_out[0])
 
             molecular_ham = molecule.get_molecular_hamiltonian(
                 occupied_indices=occ, active_indices=act)
             fermion_ham = get_fermion_operator(molecular_ham)
             qop = jordan_wigner(fermion_ham)
+        if chosen is not None and "E_casci_bond_type" in space:
+            # the bond-type search computed this space already (CSV, 6 decimals): same energy
+            if abs(E_CASCI - float(space["E_casci_bond_type"])) > 2e-6:
+                raise RuntimeError(f"{mol_name} {space.get('label')}: CASCI {E_CASCI:.8f} Ha, "
+                                   f"bond-type table {space['E_casci_bond_type']:.8f} Ha")
         qubit_ham = make_qubitop_real(qop, tol=JW_IMAG_TOL)
         c0, qubit_ham_nc = split_constant(qubit_ham)
         spin_nc = cudaq.SpinOperator(qubit_ham_nc)

@@ -14,8 +14,10 @@ recovers.
 
 With --leave-out / --leave-out-virtual the same type spaces are also built without HOMO-k or
 LUMO+k (with its degenerate set); the new spaces go at the end of the "all spaces" sheet, marked in
-"left out". Selection criterion, in every sheet: ratio = (E_corr - E_best) / |E_best|, where E_best is
-the best E_corr of the same size; a space passes when the ratio is below RATIO_MAX (0.25).
+"left out". Selection criterion (Excel formulas, threshold editable in the summary sheet):
+ratio = (E_corr - E_best) / |E_best|, where E_best is
+the best E_corr of the molecule (all sizes, all spaces); a space passes when the ratio is below
+RATIO_MAX (0.25).
 
     python scripts/bond_type_casci.py --molecule Benzene --max-electrons 8 --max-orbitals 10
     python scripts/bond_type_casci.py --molecule Ethylene --leave-out 1 2 3 --leave-out-virtual 1 2 3
@@ -24,111 +26,30 @@ the best E_corr of the same size; a space passes when the ratio is below RATIO_M
 """
 
 import argparse
+import datetime
 import glob
 import itertools
+import json
 import os
 import pickle
+import re
+import socket
+import subprocess
 import sys
 import time
 
 import numpy as np
 import pandas as pd
-from pyscf import cc, mcscf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from vqe_cudaq.hamiltonian import run_scf
 from vqe_cudaq.molecules import molecules
-from vqe_cudaq.orbital_selection import BOND_SHARE_MIN, NON_VALENCE, classify_orbitals
+from vqe_cudaq.bond_type_search import (ALL, FAMILIES, casci, cumulative, degenerate_sets,  # noqa: F401
+                                        frozen_core_ccsd, groups, left_out_rows, orbital_type,
+                                        type_sets, type_spaces, typed_orbitals, with_energy_order_gain)
 
 HARTREE_TO_EV = 27.211386245988
-ALL = "all"
-
-
-def orbital_type(shares, occupied):
-    """Largest bond share; a virtual orbital with no bond share above BOND_SHARE_MIN is "no bond"."""
-    bonds = {n: w for n, w in shares.items() if n != NON_VALENCE}
-    if not bonds or (not occupied and max(bonds.values()) < BOND_SHARE_MIN):
-        return NON_VALENCE
-    return max(bonds, key=bonds.get)
-
-
-def groups(table, rows, nearest_first):
-    """Degenerate sets as lists of orbital numbers, nearest the gap first."""
-    out = {}
-    for _, r in rows.iterrows():
-        out.setdefault(int(r["degenerate_group"]), []).append(int(r["index"]))
-    keys = sorted(out, reverse=nearest_first == "down")
-    return [out[k] for k in keys]
-
-
-FAMILIES = {
-    "all π": lambda t: t.endswith(" π") or "lone pair (π)" in t,
-    "all X–X σ": lambda t: t.endswith(" σ") and "–H" not in t,
-    "all X–H σ": lambda t: t.endswith(" σ") and "–H" in t,
-    "all lone pairs": lambda t: "lone pair" in t,
-    "all π*": lambda t: t.endswith(" π*"),
-    "all X–X σ*": lambda t: t.endswith(" σ*") and "–H" not in t,
-    "all X–H σ*": lambda t: t.endswith(" σ*") and "–H" in t,
-}
-
-
-def type_sets(types, max_union):
-    """{label: set of types}: each type, unions up to ``max_union`` types, families of two or more
-    types and pairs of families, and all types together. Sets with the same types appear once."""
-    out = {}
-    for n in range(1, min(max_union, len(types)) + 1):
-        for c in itertools.combinations(sorted(types), n):
-            out[" + ".join(c)] = frozenset(c)
-    families = {name: frozenset(t for t in types if test(t)) for name, test in FAMILIES.items()}
-    families = {k: v for k, v in families.items() if len(v) >= 2}
-    out.update(families)
-    for (a, sa), (b, sb) in itertools.combinations(families.items(), 2):
-        out[f"{a} + {b}"] = sa | sb
-    out[" + ".join(sorted(types))] = frozenset(types)
-    unique = {}
-    for k, v in out.items():
-        unique.setdefault(v, k)                     # the first (shortest) label of each set
-    return {k: v for v, k in unique.items()}
-
-
-def cumulative(group_list, limit):
-    """(number of orbitals, orbitals) after taking 1, 2, ... groups, up to ``limit`` orbitals."""
-    out, taken = [], []
-    for g in group_list:
-        if len(taken) + len(g) > limit:
-            break
-        taken = taken + g
-        out.append(list(taken))
-    return out
-
-
-def casci(mf, active, nelec, cache):
-    key = tuple(sorted(active))
-    if key not in cache:
-        cas = mcscf.CASCI(mf, len(active), nelec)
-        cas.verbose = 0
-        e = cas.kernel(cas.sort_mo([k + 1 for k in key]))[0]
-        s2 = cas.fcisolver.spin_square(cas.ci, len(active), nelec)[0]
-        cache[key] = (float(e), float(s2))
-    return cache[key]
-
-
-DEGENERATE_HA = 1e-5        # orbital energies closer than this are one degenerate set
-
-
-def degenerate_sets(mo_energy):
-    """Orbital number -> its degenerate set (sorted orbital numbers), for sets of two or more."""
-    order = np.argsort(mo_energy)
-    sets, current = [], [int(order[0])]
-    for a, b in zip(order[:-1], order[1:]):
-        if mo_energy[b] - mo_energy[a] < DEGENERATE_HA:
-            current.append(int(b))
-        else:
-            sets.append(current)
-            current = [int(b)]
-    sets.append(current)
-    return {k: sorted(s) for s in sets if len(s) > 1 for k in s}
 
 
 def vqe_runs(molecule, root="results"):
@@ -168,9 +89,11 @@ def counted(types):
 
 VS_ORDER = "vs energy order (mHa) = E_corr − E_corr of the energy-ordered space of the same size"
 RATIO_MAX = 0.25
-RATIO = "ratio = (E_corr − best E_corr of the same size) ÷ |best E_corr|"
-PASS = f"passes (ratio < {RATIO_MAX})"
-VS_BEST = "vs best of same size (mHa) = E_corr − best E_corr of the same size in the \"all spaces\" sheet"
+RATIO = "ratio = (E_corr − E_best) ÷ |E_best|"
+BEST_ALL = "E_best (mHa) = best E_corr of the molecule, all sizes"
+PASS = "passes (ratio < threshold in summary)"
+THRESHOLD = "Threshold: a space passes when ratio < (change this value)"
+E_BEST = "E_best = best E_corr of the molecule, all sizes (mHa)"
 
 
 def skipped_occupied(shown, nocc):
@@ -191,17 +114,47 @@ def skipped_virtual(shown, nocc):
     return " ".join(orbital_name(k, nocc) for k in range(nocc, max(vir) + 1) if k not in vir)
 
 
-def add_ratio(frame, best_by_size):
-    """The selection criterion: how far each space is below the best space of its size."""
-    best = frame["size"].map(best_by_size)
-    ratio = (frame[E_CORR] - best) / best.abs()
+def add_ratio(frame, best, ratio_max=RATIO_MAX):
+    """The selection criterion: how far each space is below the best space of the molecule
+    (the most negative E_corr of all spaces, of any size). In the Excel file these three columns
+    become formulas that read E_best and the threshold from the summary sheet."""
+    ratio = (frame[E_CORR] - best) / abs(best)
+    frame[BEST_ALL] = round(best, 3)
     frame[RATIO] = ratio.round(4)
-    frame[PASS] = np.where(ratio < RATIO_MAX, "yes", "no")
+    frame[PASS] = np.where(ratio < ratio_max, "yes", "no")
     return frame
 
 
+def column_letter(ws, heading):
+    from openpyxl.utils import get_column_letter
+    for cell in ws[1]:
+        if cell.value == heading:
+            return get_column_letter(cell.column)
+    raise KeyError(heading)
+
+
+def add_formulas(xl, n_rows):
+    """Ratio, passes and E_best as Excel formulas, so the threshold can be changed in the file:
+    the summary holds the threshold (a number) and E_best (=MIN of the E_corr column)."""
+    summary, spaces = xl.sheets["summary"], xl.sheets["all spaces"]
+    where = {c.value: c.row for c in summary["A"] if c.value}
+    eb, th = where[E_BEST], where[THRESHOLD]
+    E, B, R, P = (column_letter(spaces, h) for h in (E_CORR, BEST_ALL, RATIO, PASS))
+    last = n_rows + 1
+    summary[f"B{eb}"] = f"=MIN('all spaces'!{E}2:{E}{last})"
+    summary[f"B{where['   same as']}"] = (f'="E_corr ≤ "&TEXT((1-B{th})*B{eb},"0.000")&" mHa (at least "'
+                                          f'&ROUND(100*(1-B{th}),2)&"% of E_best)"')
+    summary[f"B{where['Spaces that pass']}"] = f"=COUNTIF('all spaces'!{P}2:{P}{last},\"yes\")"
+    for r in range(2, last + 1):
+        spaces[f"{B}{r}"] = f"=summary!$B${eb}"
+        spaces[f"{R}{r}"] = f"=({E}{r}-summary!$B${eb})/ABS(summary!$B${eb})"
+        spaces[f"{P}{r}"] = f'=IF({R}{r}<summary!$B${th},"yes","no")'
+        spaces[f"{R}{r}"].number_format = "0.0000"
+    spaces.auto_filter.ref = spaces.dimensions          # filter arrows: passes = yes, sort by E_corr
+
+
 def left_out_sheet(path, bracketed, e_hf):
-    """Spaces with one HOMO-k or LUMO+k left out: one row per space, best first in each size."""
+    """Rows for the spaces with one HOMO-k or LUMO+k left out (added at the end of "all spaces")."""
     data = pd.read_csv(path, encoding="utf-8-sig")
     rows = []
     for r in data.itertuples():
@@ -215,7 +168,6 @@ def left_out_sheet(path, bracketed, e_hf):
                      E_CORR: round(r.E_corr_mHa, 3), "CCSD E_corr (mHa)": round(r.ccsd_corr_mHa, 3),
                      PERCENT: round(r.percent_of_ccsd, 2),
                      VS_ORDER: None if pd.isna(r.gain_vs_energy_order_mHa) else round(r.gain_vs_energy_order_mHa, 3),
-                     VS_BEST: None if pd.isna(r.vs_best_with_it_mHa) else round(r.vs_best_with_it_mHa, 3),
                      "active orbitals": shown, "degenerate sets": groups})
     out = pd.DataFrame(rows)
     order = {k: i for i, k in enumerate(dict.fromkeys(data["left_out"]))}
@@ -223,9 +175,153 @@ def left_out_sheet(path, bracketed, e_hf):
                            key=lambda c: c.map(order) if c.name == "left out" else c)
 
 
-def summarize(csv_path, xlsx_path, mf, molecule):
+def now():
+    return datetime.datetime.now().strftime("%a %b %d %H:%M:%S %Y")
+
+
+def record_run(csv_path, **fields):
+    """Add fields to <molecule>_bond_type_casci_run.json next to the CSV (laptop or cluster)."""
+    path = csv_path.replace(".csv", "_run.json")
+    info = json.load(open(path)) if os.path.exists(path) else {}
+    info.update(fields)
+    with open(path, "w") as fh:
+        json.dump(info, fh, indent=1)
+
+
+def settings(args):
+    """The search options of this run, for the summary sheet."""
+    return {"setting: max electrons": args.max_electrons, "setting: max orbitals": args.max_orbitals,
+            "setting: max virtual": args.max_virtual or "same as max orbitals",
+            "setting: max types mixed on one side": args.max_union,
+            "setting: bond types used": ", ".join(args.types) if args.types else "all",
+            "setting: outside-valence virtuals": "not used" if args.no_outside_valence else "used",
+            "setting: left out HOMO-k, k =": " ".join(map(str, args.leave_out)) or "-",
+            "setting: left out LUMO+k, k =": " ".join(map(str, args.leave_out_virtual)) or "-"}
+
+
+def machine():
+    """Computer, threads and the git commit of this code."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+                                cwd=here).stdout.strip()
+        changed = subprocess.run(["git", "status", "--porcelain", "--", "scripts/bond_type_casci.py", "vqe_cudaq"],
+                                 capture_output=True, text=True, cwd=os.path.dirname(here)).stdout.strip()
+        if commit and changed:
+            commit += " + uncommitted changes"
+    except OSError:
+        commit = ""
+    from pyscf import lib
+    return {"host": socket.gethostname(), "threads": lib.num_threads(), "commit": commit or "unknown"}
+
+
+def run_info(outdir, molecule):
+    """Run details: the record written by this script, else the cluster log (older runs)."""
+    path = os.path.join(outdir, f"{molecule}_bond_type_casci_run.json")
+    if os.path.exists(path):
+        info = json.load(open(path))
+        when = lambda t: datetime.datetime.strptime(t, "%a %b %d %H:%M:%S %Y")
+        if "start" in info and "end" in info:
+            info["wall time (min)"] = round((when(info["end"]) - when(info["start"])).total_seconds() / 60, 1)
+        info["record file"] = os.path.basename(path)
+        return info
+    return run_log(outdir, molecule)
+
+
+def run_log(outdir, molecule):
+    """Times and host of the run from the cluster log (outdir/logs/*.log), if there is one."""
+    for path in sorted(glob.glob(os.path.join(outdir, "logs", "*.log"))):
+        text = open(path, errors="replace").read()
+        if f"molecule: {molecule} " not in text:
+            continue
+        out = {"log file": os.path.basename(path)}
+        m = re.search(r"host: (\S+)\s+commit: (\S+)\s+start: (.+)", text)
+        if m:
+            out["host"], out["commit"], out["start"] = m.group(1), m.group(2), m.group(3).strip()
+        m = re.search(r"^end: (.+)$", text, re.M)
+        if m:
+            out["end"] = m.group(1).strip()
+        when = lambda t: datetime.datetime.strptime(" ".join(t.split()[:4] + t.split()[5:6]), "%a %b %d %H:%M:%S %Y")
+        if "start" in out and "end" in out:
+            out["wall time (min)"] = round((when(out["end"]) - when(out["start"])).total_seconds() / 60, 1)
+        m = re.search(r"CCSD correlation \(frozen core (\d+)\) \S+ mHa, (\d+) s", text)
+        if m:
+            out["frozen core orbitals"], out["SCF + orbital types + CCSD (s)"] = int(m.group(1)), int(m.group(2))
+        m = re.search(r"active spaces \((\d+) different\), largest \|S2\| (\S+), (\d+) s", text)
+        if m and "SCF + orbital types + CCSD (s)" in out:
+            out["type-combination CASCI (s)"] = int(m.group(3)) - out["SCF + orbital types + CCSD (s)"]
+        m = re.search(rf"^{re.escape(molecule)}: (\d+) new spaces, (\d+) s", text, re.M)
+        if m:
+            out["left-out CASCI (s)"] = int(m.group(2))
+        return out
+    return {}
+
+
+def summary_sheet(molecule, mf, data, left, spaces, e_total, outdir, ratio_max=RATIO_MAX):
+    """One sheet with the totals, the checks and the time taken."""
+    from pyscf.data.elements import chemcore
+    mol, nocc = mf.mol, mf.mol.nelectron // 2
+    ncore = chemcore(mol)
+    best = spaces.loc[spaces[E_CORR].idxmin()]
+    passing = spaces[spaces[PASS] == "yes"]
+    order = best.get(VS_ORDER)
+    s2 = [data["S2"].abs().max()] + ([left["S2"].abs().max()] if left is not None and len(left) else [])
+    left_counts = left["left_out"].value_counts() if left is not None and len(left) else pd.Series(dtype=int)
+    log = run_info(outdir, molecule)
+    rows = [
+        ("Molecule", molecule),
+        ("Basis", mol.basis),
+        ("Electrons", mol.nelectron),
+        ("Basis functions", mol.nao),
+        ("Occupied orbitals (core frozen + valence)", f"{nocc} ({ncore} + {nocc - ncore})"),
+        ("Virtual orbitals", mol.nao - nocc),
+        ("", ""),
+        ("E_HF (Ha)", round(mf.e_tot, 8)),
+        ("CCSD E_corr, whole molecule, frozen core (mHa)", round(e_total, 3)),
+        ("E_CCSD total = E_HF + CCSD E_corr (Ha)", round(mf.e_tot + e_total / 1e3, 8)),
+        ("", ""),
+        ("Largest active space", f"({data['nele'].max()}e,{data['norb'].max()}o)"),
+        ("Different active spaces, type combinations", data["active"].nunique()),
+        ("Different active spaces, HOMO-k or LUMO+k left out", 0 if left is None else len(left)),
+        ("   of which without", ", ".join(f"{k}: {v}" for k, v in left_counts.items()) or "-"),
+        ("Different active spaces, total", len(spaces)),
+        ("Sizes (electrons, orbitals)", spaces["size"].nunique()),
+        ("", ""),
+        (E_BEST, round(best[E_CORR], 3)),
+        ("   size", best["size"]),
+        ("   % of CCSD E_corr", round(best[PERCENT], 2)),
+        ("   occupied types", best["occupied types (number of orbitals)"]),
+        ("   virtual types", best["virtual types (number of orbitals)"]),
+        ("   active orbitals", best["active orbitals"]),
+        ("   left out", best.get("left out", "") or "-"),
+        ("   vs energy order of the same size (mHa)", "-" if pd.isna(order) or order is None else round(order, 3)),
+        ("", ""),
+        ("Selection criterion", "ratio = (E_corr − E_best) ÷ |E_best|"),
+        (THRESHOLD, ratio_max),
+        ("   same as", f"E_corr ≤ {1 - ratio_max:g} × E_best = {round(best[E_CORR] * (1 - ratio_max), 3)} mHa"
+                      f" (at least {100 * (1 - ratio_max):g}% of E_best)"),
+        ("Spaces that pass", len(passing)),
+        ("   list of them", f"sheet 'passes ratio < {ratio_max:g}', best first (made with this threshold); "
+                           f"for another threshold: 'all spaces', filter 'passes' = yes"),
+        ("", ""),
+        ("Check: largest |S2| of a CASCI state (0 = singlet)", float(f"{max(s2):.1e}")),
+        ("Check: spaces that split a degenerate set", int(spaces["active orbitals"].str.contains("split").sum())),
+        ("Check: E_corr = (E_CASCI − E_HF) × 1000 in every row",
+         "yes" if np.allclose(spaces[E_CORR], 1e3 * (spaces["E_CASCI (Ha)"] - spaces["E_HF (Ha)"]), atol=2e-3) else "NO"),
+        ("Full independent check", "python scripts/check_bond_type_casci.py --outdir <folder> --molecule " + molecule),
+        ("", ""),
+    ]
+    if log:
+        rows += [("Run: " + k, v) for k, v in log.items()]
+    else:
+        rows += [("Run", "no run record (_run.json) or cluster log found")]
+    return pd.DataFrame(rows, columns=["item", "value"])
+
+
+def summarize(csv_path, xlsx_path, mf, molecule, ratio_max=RATIO_MAX):
     """Excel file for reading: one row per different active space, labelled by the types it holds,
-    degenerate sets in [brackets], the best space of each size, and the published VQE runs."""
+    degenerate sets in [brackets], the selection ratio against the best space of the molecule, the
+    spaces with a HOMO-k or LUMO+k left out, and the published VQE runs."""
     data = pd.read_csv(csv_path, encoding="utf-8-sig")
     mo_energy, nocc, e_hf = np.asarray(mf.mo_energy), mf.mol.nelectron // 2, mf.e_tot
     e_total = data["ccsd_corr_mHa"].iloc[0]                                           # CCSD, mHa
@@ -273,22 +369,20 @@ def summarize(csv_path, xlsx_path, mf, molecule):
     left_rows = left_out_sheet(left, bracketed, e_hf) if os.path.exists(left) else None
     if left_rows is not None:          # the spaces without a HOMO-k or LUMO+k go at the end, marked
         spaces.insert(0, "left out", "")
-        spaces = pd.concat([spaces, left_rows.drop(columns=[VS_BEST])], ignore_index=True)
+        spaces = pd.concat([spaces, left_rows], ignore_index=True)
     spaces.insert(1 if "left out" in spaces else 0, "skipped occupied (not in space)",
                   [skipped_occupied(t, nocc) for t in spaces["active orbitals"]])
     at = list(spaces.columns).index("skipped occupied (not in space)") + 1
     spaces.insert(at, "skipped virtual (not in space)",
                   [skipped_virtual(t, nocc) for t in spaces["active orbitals"]])
-    best_by_size = spaces.groupby("size")[E_CORR].min()
-    spaces = add_ratio(spaces, best_by_size)
+    best_all = spaces[E_CORR].min()                 # main and left-out spaces together
+    spaces = add_ratio(spaces, best_all, ratio_max)
     if left_rows is not None:
         left_rows.insert(1, "skipped occupied (not in space)",
                          [skipped_occupied(t, nocc) for t in left_rows["active orbitals"]])
         left_rows.insert(2, "skipped virtual (not in space)",
                          [skipped_virtual(t, nocc) for t in left_rows["active orbitals"]])
-        left_rows = add_ratio(left_rows, best_by_size)
-    best = spaces.loc[spaces.groupby(["electrons", "orbitals"])[E_CORR].idxmin()]
-    best = best.sort_values(["electrons", "orbitals"])
+        left_rows = add_ratio(left_rows, best_all, ratio_max)
     types = {}
     for r in data.drop_duplicates("active").itertuples():
         names_, types_ = r.names.split(), r.types.split(" | ")
@@ -307,11 +401,20 @@ def summarize(csv_path, xlsx_path, mf, molecule):
                          "same orbitals as bond-type space": " | ".join(types[index]) if index in types else "",
                          "source": f"results/{v['backend']}/{v['file']}"})
     with pd.ExcelWriter(xlsx_path) as xl:
-        sheets = [("all spaces", spaces), ("best per size", best)]
+        def arranged(frame):                    # orbitals first, the skipped/left-out marks last
+            first = [c for c in ("active orbitals", "degenerate sets") if c in frame]
+            last = [c for c in ("left out", "skipped occupied (not in space)", "skipped virtual (not in space)")
+                    if c in frame]
+            return frame[first + [c for c in frame if c not in first + last] + last]
+        spaces = arranged(spaces)
+        passing = spaces[spaces[PASS] == "yes"].sort_values(E_CORR, kind="stable")    # best first
+        if left_rows is not None:
+            left_rows = arranged(left_rows)
+        left_csv = pd.read_csv(left, encoding="utf-8-sig") if left_rows is not None else None
+        summary = summary_sheet(molecule, mf, data, left_csv, spaces, e_total, os.path.dirname(csv_path), ratio_max)
+        sheets = [("summary", summary), ("all spaces", spaces), (f"passes ratio < {ratio_max:g}", passing)]
         if vqe_rows:
             sheets.append(("VQE (paper spaces)", pd.DataFrame(vqe_rows)))
-        if left_rows is not None:
-            sheets.append(("without HOMO-k or LUMO+k", left_rows))
         for sheet, frame in sheets:
             frame.to_excel(xl, sheet_name=sheet, index=False)
             ws = xl.sheets[sheet]
@@ -319,6 +422,7 @@ def summarize(csv_path, xlsx_path, mf, molecule):
             for col in ws.columns:
                 text = [str(c.value or "") for c in col if not str(c.value or "").startswith("=")]
                 ws.column_dimensions[col[0].column_letter].width = min(70, max(map(len, text or [""])) + 2)
+        add_formulas(xl, len(spaces))
     return len(spaces)
 
 
@@ -328,7 +432,14 @@ def main():
     p.add_argument("--basis", default="cc-pVDZ")
     p.add_argument("--max-electrons", type=int, default=8)
     p.add_argument("--max-orbitals", type=int, default=10)
+    p.add_argument("--max-virtual", type=int, default=None, help="largest number of virtual orbitals in a space")
     p.add_argument("--max-union", type=int, default=2, help="largest number of single bond types mixed on one side")
+    p.add_argument("--types", nargs="+", default=None,
+                   help='use only these bond types (occupied and virtual), e.g. "C–C π" "C–C π*"')
+    p.add_argument("--no-outside-valence", action="store_true",
+                   help='do not use "no bond (outside valence)" virtual orbitals')
+    p.add_argument("--ratio-max", type=float, default=RATIO_MAX,
+                   help="selection threshold written into the Excel file (it can be changed there)")
     p.add_argument("--outdir", default=os.path.join("analysis", "bond_type_casci"))
     p.add_argument("--leave-out", nargs="+", type=int, default=[],
                    help="also run the type spaces without HOMO-k (with its degenerate set), e.g. 1 2 3")
@@ -342,7 +453,7 @@ def main():
             path = os.path.join(args.outdir, f"{name}_bond_type_casci.csv")
             xlsx = path.replace(".csv", "_summary.xlsx")
             mf = run_scf(molecules[name], args.basis, args.max_memory)
-            print(f"{summarize(path, xlsx, mf, name)} different active spaces -> {xlsx}")
+            print(f"{summarize(path, xlsx, mf, name, args.ratio_max)} different active spaces -> {xlsx}")
         else:
             path = os.path.join(args.outdir, f"{name}_bond_type_casci.csv")
             leave = args.leave_out or args.leave_out_virtual
@@ -352,71 +463,46 @@ def main():
                 run_left_out(name, args)
 
 
-def type_spaces(mf, table, occ, vir, args, cache, e_corr_total, name):
-    """One row per (occupied type set, virtual type set, size): the CASCI energy of the space."""
-    occ_sets = {**type_sets(sorted(set(occ["type"])), args.max_union), ALL: None}
-    vir_sets = {**type_sets(sorted(set(vir["type"])), args.max_union), ALL: None}
-    max_occ = args.max_electrons // 2
-
-    rows = []
-    for (o_label, os_), (v_label, vs) in itertools.product(occ_sets.items(), vir_sets.items()):
-        o_rows = occ if os_ is None else occ[occ["type"].isin(os_)]
-        v_rows = vir if vs is None else vir[vir["type"].isin(vs)]
-        o_choices = cumulative(groups(table, o_rows, "down"), max_occ)
-        v_choices = cumulative(groups(table, v_rows, "up"), args.max_orbitals)
-        for o_list, v_list in itertools.product(o_choices, v_choices):
-            if len(o_list) + len(v_list) > args.max_orbitals:
-                continue
-            active = o_list + v_list
-            nelec = 2 * len(o_list)
-            e, s2 = casci(mf, active, nelec, cache)
-            rows.append(dict(
-                molecule=name, occupied_types=o_label, virtual_types=v_label,
-                nele=nelec, norb=len(active), E_casci=e, E_corr_mHa=1e3 * (e - mf.e_tot),
-                percent_of_ccsd=100 * (e - mf.e_tot) / e_corr_total, ccsd_corr_mHa=1e3 * e_corr_total, S2=s2,
-                active=" ".join(str(k) for k in sorted(active)),
-                names=" ".join(table.loc[sorted(active), "name"]),
-                types=" | ".join(table.loc[sorted(active), "type"])))
-    return rows
-
-
 def run_molecule(name, args):
     t0 = time.time()
+    start = now()
     mf = run_scf(molecules[name], args.basis, args.max_memory)
-    table = classify_orbitals(mf)
+    table = typed_orbitals(mf)
     ncore, nocc = table.attrs["ncore"], table.attrs["nocc"]
-    table["type"] = [orbital_type(d, o) if not c else "core"
-                     for d, o, c in zip(table["bond_shares"], table["occupied"], table["core"])]
     occ = table[table["occupied"] & ~table["core"]]
     vir = table[~table["occupied"]]
+    if args.types:
+        unknown = set(args.types) - set(table["type"])
+        if unknown:
+            print(f"{name}: no orbital of type {sorted(unknown)}; types here: {sorted(set(table['type']) - {'core'})}",
+                  flush=True)
 
     # whole-molecule correlation energy, frozen core like the active spaces
-    ccsd = cc.CCSD(mf, frozen=ncore)
-    ccsd.max_memory = args.max_memory
-    ccsd.verbose = 0
-    e_corr_total = float(ccsd.kernel()[0])
+    e_corr_total = frozen_core_ccsd(mf, ncore, args.max_memory)
+    t_ccsd = time.time() - t0
     print(f"{name}: E_HF {mf.e_tot:.8f} Ha, CCSD correlation (frozen core {ncore}) {e_corr_total * 1e3:.3f} mHa, "
-          f"{time.time() - t0:.0f} s", flush=True)
+          f"{t_ccsd:.0f} s", flush=True)
 
     cache = {}
     rows = type_spaces(mf, table, occ, vir, args, cache, e_corr_total, name)
-    data = pd.DataFrame(rows)
-    ref = data[(data["occupied_types"] == ALL) & (data["virtual_types"] == ALL)]
-    ref = ref.set_index(["nele", "norb"])["E_corr_mHa"]
-    data["gain_vs_energy_order_mHa"] = [r.E_corr_mHa - ref[(r.nele, r.norb)] if (r.nele, r.norb) in ref.index
-                                        else np.nan for r in data.itertuples()]
+    data = with_energy_order_gain(rows)
     os.makedirs(args.outdir, exist_ok=True)
     path = os.path.join(args.outdir, f"{name}_bond_type_casci.csv")
     data.round(6).to_csv(path, index=False, encoding="utf-8-sig")   # the marker lets Excel read π, σ, –
     print(f"{len(data)} active spaces ({len(cache)} different), largest |S2| {data['S2'].abs().max():.1e}, "
           f"{time.time() - t0:.0f} s -> {path}", flush=True)
-    write_summary(path, mf, name)
+    if os.path.exists(path.replace(".csv", "_run.json")):
+        os.remove(path.replace(".csv", "_run.json"))            # a new main run starts a new record
+    record_run(path, **machine(), **settings(args), start=start, end=now(), **{
+        "frozen core orbitals": int(ncore), "SCF + orbital types + CCSD (s)": round(t_ccsd),
+        "type-combination CASCI (s)": round(time.time() - t0 - t_ccsd)})
+    write_summary(path, mf, name, args.ratio_max)
 
 
-def write_summary(path, mf, name):
+def write_summary(path, mf, name, ratio_max=RATIO_MAX):
     xlsx = path.replace(".csv", "_summary.xlsx")
     try:
-        print(f"{summarize(path, xlsx, mf, name)} different active spaces -> {xlsx}", flush=True)
+        print(f"{summarize(path, xlsx, mf, name, ratio_max)} different active spaces -> {xlsx}", flush=True)
     except Exception as err:            # e.g. no openpyxl on the cluster: the CSV files are complete
         print(f"Excel summary not written ({err!r}); rebuild it later with --summary-only", flush=True)
 
@@ -426,45 +512,21 @@ def run_left_out(name, args):
     in ``args.leave_out`` and LUMO+k for k in ``args.leave_out_virtual``. Only spaces not already in
     the main CSV are kept."""
     t0 = time.time()
+    start = now()
     path = os.path.join(args.outdir, f"{name}_bond_type_casci.csv")
     main_data = pd.read_csv(path, encoding="utf-8-sig")
     e_corr_total = main_data["ccsd_corr_mHa"].iloc[0] / 1e3
     mf = run_scf(molecules[name], args.basis, args.max_memory)
-    table = classify_orbitals(mf)
-    nocc = table.attrs["nocc"]
-    table["type"] = [orbital_type(d, o) if not c else "core"
-                     for d, o, c in zip(table["bond_shares"], table["occupied"], table["core"])]
-    occ = table[table["occupied"] & ~table["core"]]
-    vir = table[~table["occupied"]]
-    sets = degenerate_sets(np.asarray(mf.mo_energy))
-    ref = main_data[(main_data["occupied_types"] == ALL) & (main_data["virtual_types"] == ALL)]
-    ref = ref.set_index(["nele", "norb"])["E_corr_mHa"]
-    best = main_data.groupby(["nele", "norb"])["E_corr_mHa"].min()
-    seen = set(main_data["active"])
-    rows, cache, done = [], {}, set()
-    targets = [nocc - 1 - k for k in args.leave_out if nocc - 1 - k in set(occ["index"])] + \
-              [nocc + k for k in args.leave_out_virtual if nocc + k in set(vir["index"])]
-    for orbital in targets:
-        removed = tuple(sets.get(orbital, [orbital]))
-        if removed in done:                     # e.g. HOMO-3 in the same degenerate set as HOMO-2
-            continue
-        done.add(removed)
-        label = "/".join(orbital_name(m, nocc) for m in sorted(removed, reverse=orbital < nocc))
-        o_keep, v_keep = occ[~occ["index"].isin(removed)], vir[~vir["index"].isin(removed)]
-        for r in type_spaces(mf, table, o_keep, v_keep, args, cache, e_corr_total, name):
-            if r["active"] in seen:
-                continue
-            seen.add(r["active"])
-            size = (r["nele"], r["norb"])
-            r["left_out"] = label
-            r["gain_vs_energy_order_mHa"] = r["E_corr_mHa"] - ref[size] if size in ref.index else np.nan
-            r["vs_best_with_it_mHa"] = r["E_corr_mHa"] - best[size] if size in best.index else np.nan
-            rows.append(r)
-        print(f"  without {label}: {len(rows)} new spaces so far, {time.time() - t0:.0f} s", flush=True)
+    table = typed_orbitals(mf)
+    rows = left_out_rows(mf, table, args, {}, e_corr_total, name, main_data,
+                         progress=lambda label, n: print(f"  without {label}: {n} new spaces so far, "
+                                                         f"{time.time() - t0:.0f} s", flush=True))
     out = path.replace(".csv", "_left_out.csv")
     pd.DataFrame(rows).round(6).to_csv(out, index=False, encoding="utf-8-sig")
     print(f"{name}: {len(rows)} new spaces, {time.time() - t0:.0f} s -> {out}", flush=True)
-    write_summary(path, mf, name)
+    first = {} if os.path.exists(path.replace(".csv", "_run.json")) else {**machine(), "start": start}
+    record_run(path, **first, end=now(), **{"left-out CASCI (s)": round(time.time() - t0)})
+    write_summary(path, mf, name, args.ratio_max)
 
 
 if __name__ == "__main__":
