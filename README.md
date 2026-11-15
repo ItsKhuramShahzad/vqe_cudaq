@@ -1,4 +1,4 @@
-# Acceleration of molecular ground-state energy estimation with the variational quantum eigensolver using CUDA-Q
+# GPU acceleration of molecular ground-state energy estimation with the variational quantum eigensolver using CUDA-Q
 
 A **Variational Quantum Eigensolver (VQE)** framework for molecular
 ground-state energies using **CUDA-Q**, **OpenFermion**, and **PySCF**, plus a
