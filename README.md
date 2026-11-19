@@ -147,6 +147,7 @@ vqe_cudaq/
 │   ├── bond_type_overview.py # one row per molecule from the summary sheets
 │   ├── bond_type_figure.py   # figure: energy order vs bond type, MOs as sums of IBOs/LIVVOs
 │   ├── bond_type_paper_figure.py # paper version of that figure (single column) + captions
+│   ├── bond_type_manuscript_figure.py # manuscript figure: two molecules, levels split by bond shares
 │   ├── pi_plus_sigma_casci.py # CASCI in the π space plus any σ/σ* choice (skipping allowed)
 │   ├── run_bond_type_casci.sh # SLURM array: bond-type CASCI + HOMO/LUMO left out, all molecules
 │   ├── run_cpu_final.sh      # SLURM array for the final benchmark, CPU node
@@ -460,9 +461,12 @@ CCSD rerun with the chosen orbitals moved into a block (equal to 1e-14).
 python scripts/bond_type_figure.py --molecule Ethylene --size 6,8
 # paper version: single-column level diagram, orbital pictures and suggested captions
 python scripts/bond_type_paper_figure.py --molecule Ethylene --size 6,8
+# manuscript figure: two molecules side by side (double column), or stacked (single column)
+python scripts/bond_type_manuscript_figure.py --molecules Ethylene Cytosine --sizes 6,8 8,10
+python scripts/bond_type_manuscript_figure.py --molecules Ethylene Cytosine --stack
 ```
 
-Both write to `analysis/figures/bond_type_selection/` and need scikit-image
+They write to `analysis/figures/bond_type_selection/`; the first two need scikit-image
 (`pip install -e ".[visualization]"`).
 
 ---

@@ -62,6 +62,14 @@ def energy_order_space(folder, molecule, nele, norb):
 SPREAD = 1.45                   # distance between the columns of the level diagram
 
 
+def pieces_of(table, k):
+    """(bond name, share) of MO k for every share >= 0.1, largest first, then (None, rest) for the
+    shares below 0.1 together; the pieces add up to 1."""
+    big = sorted(((n, w) for n, w in table.loc[k, "bond_shares"].items() if w >= 0.1), key=lambda t: -t[1])
+    rest = 1 - sum(w for _, w in big)
+    return big + ([(None, rest)] if rest > 0.005 else [])
+
+
 def level_diagram(ax, table, nocc, ncore, columns, colours, e_best):
     top = max(max(c["active"]) for c in columns)
     shown = list(range(ncore, nocc)) + list(range(nocc, top + 1))
@@ -71,8 +79,12 @@ def level_diagram(ax, table, nocc, ncore, columns, colours, e_best):
     for c, col in enumerate(columns):
         x = SPREAD * c
         for k in shown:
-            colour = colours.get(table.loc[k, "type"], "#9ca3af")
-            ax.plot([x - half, x + half], [y[k], y[k]], color=colour, lw=2.4, solid_capstyle="butt", zorder=2)
+            start = x - half
+            for name, w in pieces_of(table, k):               # the line split by the real bond shares
+                colour = hfo.OTHER_COLOUR if name is None else colours.get(name, "#9ca3af")
+                ax.plot([start, start + 2 * half * w], [y[k], y[k]], color=colour, lw=2.4,
+                        solid_capstyle="butt", zorder=2)
+                start += 2 * half * w
             if k < nocc:                                         # two electrons
                 for dx, up in ((-0.12, True), (0.12, False)):
                     y0, y1 = (y[k] - 0.36, y[k] + 0.36) if up else (y[k] + 0.36, y[k] - 0.36)
@@ -101,7 +113,7 @@ def level_diagram(ax, table, nocc, ncore, columns, colours, e_best):
     for side in ("top", "right", "bottom"):
         ax.spines[side].set_visible(False)
     ax.set_ylabel("Molecular orbital (lowest at the bottom; core not shown)", fontsize=8)
-    return [table.loc[k, "type"] for k in shown]
+    return sorted({n or hfo.OTHER for k in shown for n, _ in pieces_of(table, k)}, key=str)
 
 
 # ── (b) orbital pictures ──────────────────────────────────────────────────────
@@ -193,13 +205,14 @@ def main():
             columns.append(dict(title=f"Energy order\n({sz[0]}e,{sz[1]}o)", active=eo[0], E_corr=eo[1]))
         columns.append(dict(title=title, active=space["active_orbitals"], E_corr=corr[key(space)]))
 
-    colours = hfo.palette(set(table["type"]) - {"core"})
+    names = {n for shares in table["bond_shares"] for n in shares} | (set(table["type"]) - {"core"})
+    colours = {**hfo.palette(names), hfo.OTHER: hfo.OTHER_COLOUR}
     fig = plt.figure(figsize=(7.2, 10.2))
     ax = fig.add_axes((0.13, 0.43, 0.60, 0.50))
     types_shown = level_diagram(ax, table, nocc, ncore, columns, colours, e_best)
     fig.text(0.02, 0.975, "(a)", fontsize=11, fontweight="bold")
     # legend of the types and of the frames
-    legend = hfo.legend_order(set(types_shown))
+    legend = hfo.legend_order(set(types_shown) - {hfo.OTHER}) + ([hfo.OTHER] if hfo.OTHER in types_shown else [])
     for i, t in enumerate(legend):
         yy = 0.88 - 0.028 * i
         fig.lines.append(plt.Line2D([0.755, 0.79], [yy, yy], transform=fig.transFigure, color=colours[t], lw=2.4))
@@ -218,7 +231,7 @@ def main():
             + (f"\n  ({', '.join(pretty(orbital_name(k, nocc)) for k in skipped)} skipped)" if skipped else "")
             + f"\n\n$E_\\mathrm{{best}}$ = {e_best:.1f} mHa\n(best $E_\\mathrm{{corr}}$ of all sizes)"
             + "\n\nratio = ($E_\\mathrm{corr} - E_\\mathrm{best}$) / |$E_\\mathrm{best}$|\npasses when ratio < 0.25")
-    fig.text(0.755, yy - 0.04, note, va="top", fontsize=6.8, linespacing=1.4)
+    fig.text(0.755, yy - 0.04, "Each level is split by its real shares\n(largest first). Type = largest bond\nshare; outside valence is not a bond\n(LUMO+5: 0.62 outside valence,\n0.33 C–C σ* → type C–C σ*).\n\n" + note, va="top", fontsize=6.8, linespacing=1.4)
 
     # ── (b) ──
     fig.text(0.02, 0.385, "(b)", fontsize=11, fontweight="bold")
